@@ -50,3 +50,11 @@ def seed_from_env(db: Session) -> None:
             logger.info("Seeded client: %s", client_id)
         elif uris:
             logger.debug("Client already exists: %s", client_id)
+
+    # Development fallback: if no clients exist, register default for client_web (PROJECT_CONTEXT topology)
+    if db.query(Client).count() == 0:
+        default_client_id = "test-client"
+        default_redirect_uri = "http://127.0.0.1:8000/callback"
+        db.add(Client(client_id=default_client_id, redirect_uris=json.dumps([default_redirect_uri])))
+        db.commit()
+        logger.info("Seeded default dev client: %s (no clients were registered)", default_client_id)
