@@ -1,0 +1,7 @@
+[project]
+trusted = true
+
+[preferences]
+small_diffs = true
+run_tests_after_changes = true
+avoid_new_dependencies = true
