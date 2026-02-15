@@ -96,6 +96,7 @@ def test_call_me_no_tokens():
 
 
 def test_call_me_success():
+    """With a fresh token (expires_in=600), no refresh should occur."""
     store_tokens(access_token="fake-at", refresh_token="fake-rt", expires_in=600, scope="api.read")
 
     class MockGet:
@@ -110,6 +111,55 @@ def test_call_me_success():
     assert r.status_code == 200
     assert "200" in r.text
     assert "Authenticated" in r.text or "sub" in r.text
+    assert "Refresh token was used" not in r.text
+    clear_tokens()
+
+
+def test_call_me_proactive_refresh_shows_message():
+    """When token is expired/soon, proactive refresh runs and page shows 'Refresh token was used'."""
+    import time
+    from client_web.token_store import StoredTokens
+
+    # Token that is already "expired or soon" (issued 700s ago, lifetime 600s)
+    _tokens = StoredTokens(
+        access_token="old-at",
+        refresh_token="valid-rt",
+        expires_in=600,
+        scope="api.read",
+        issued_at=time.time() - 700,
+    )
+    # Inject into token_store (module-level _tokens)
+    import client_web.token_store as ts
+    ts._tokens = _tokens
+
+    class MockGet200:
+        status_code = 200
+        headers = {"content-type": "application/json"}
+
+        def json(self):
+            return {"message": "Authenticated", "sub": "1"}
+
+    class MockPostRefresh:
+        status_code = 200
+        headers = {}
+
+        def json(self):
+            return {
+                "access_token": "new-at",
+                "token_type": "Bearer",
+                "expires_in": 600,
+                "scope": "api.read",
+                "refresh_token": "new-rt",
+                "refresh_expires_in": 86400,
+            }
+
+    with patch("client_web.main.httpx.get", return_value=MockGet200()), patch(
+        "client_web.main.httpx.post", return_value=MockPostRefresh()
+    ):
+        r = client.get("/call-me")
+    assert r.status_code == 200
+    assert "Refresh token was used" in r.text
+    assert "200" in r.text
     clear_tokens()
 
 

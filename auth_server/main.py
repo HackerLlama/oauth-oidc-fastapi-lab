@@ -3,7 +3,11 @@ Authorization Server (OIDC Provider) — Milestone 2.
 User login, client registry, GET/POST /authorize, authorization code storage.
 Port 9000 per PROJECT_CONTEXT.md.
 """
+import logging
 from contextlib import asynccontextmanager
+
+# So INFO logs (e.g. refresh_token grant) show when running: python -m auth_server.main
+logging.basicConfig(level=logging.INFO, format="%(asctime)s %(levelname)s %(name)s: %(message)s")
 
 from fastapi import FastAPI
 

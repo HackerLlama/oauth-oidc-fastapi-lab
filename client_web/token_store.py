@@ -16,8 +16,17 @@ class StoredTokens:
     issued_at: float
 
     def access_token_expired_or_soon(self, buffer_seconds: int = 60) -> bool:
-        """True if access token is expired or within buffer_seconds of expiry (for proactive refresh)."""
-        return (time.time() - self.issued_at) >= (self.expires_in - buffer_seconds)
+        """
+        True if access token is expired or within buffer_seconds of expiry (for proactive refresh).
+        When token lifetime is shorter than buffer_seconds, only return True when actually expired.
+        """
+        elapsed = time.time() - self.issued_at
+        if elapsed >= self.expires_in:
+            return True
+        # "Expiring soon" only when lifetime is longer than buffer (else we'd refresh on every request)
+        if self.expires_in > buffer_seconds and elapsed >= (self.expires_in - buffer_seconds):
+            return True
+        return False
 
 
 _tokens: StoredTokens | None = None

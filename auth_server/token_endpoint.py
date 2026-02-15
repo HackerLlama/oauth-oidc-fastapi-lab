@@ -211,6 +211,12 @@ def _token_refresh_token(refresh_token: str | None, client_id: str, db: Session)
     # No nonce for refresh-issued ID token (OIDC: optional to omit or use new nonce)
     access_token, id_token, scope = _issue_tokens(user, client_id, rt.scope, None)
 
+    logger.info(
+        "refresh_token grant: new tokens issued for client_id=%s sub=%s (refresh token rotated)",
+        client_id,
+        user.id,
+    )
+
     response = {
         "access_token": access_token,
         "token_type": "Bearer",

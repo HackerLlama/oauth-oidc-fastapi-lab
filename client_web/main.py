@@ -235,6 +235,7 @@ def call_me():
     """
     Call resource server GET /me with stored access token. On 401, refresh and retry once (M7).
     """
+    refresh_used = False  # Set to True when we use refresh_token grant (for demo visibility)
     tokens = get_tokens()
     if not tokens:
         return HTMLResponse(
@@ -254,6 +255,7 @@ def call_me():
     if tokens.access_token_expired_or_soon(buffer_seconds=60):
         data = _refresh_tokens(tokens.refresh_token)
         if data:
+            refresh_used = True
             store_tokens(
                 access_token=data["access_token"],
                 refresh_token=data["refresh_token"],
@@ -314,6 +316,7 @@ def call_me():
 </html>""",
                 status_code=200,
             )
+        refresh_used = True
         store_tokens(
             access_token=data["access_token"],
             refresh_token=data["refresh_token"],
@@ -352,12 +355,14 @@ def call_me():
     except Exception:
         body_str = html.escape(r.text[:500] if r.text else "(no body)")
     status = r.status_code
+    refresh_msg = '<p><strong>Refresh token was used</strong> to obtain a new access token (see auth server log).</p>' if refresh_used else ''
     return HTMLResponse(
         f"""<!DOCTYPE html>
 <html>
 <head><meta charset="utf-8"><title>Call /me</title></head>
 <body>
   <h1>Call /me</h1>
+  {refresh_msg}
   <p>Status: {status}</p>
   <pre>{body_str}</pre>
   <p><a href="/call-me">Call /me again</a> | <a href="/">Home</a></p>
