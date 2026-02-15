@@ -10,6 +10,8 @@ No credentials are hardcoded. Use these env vars to configure each service. Defa
 |----------|---------|---------|
 | `OAUTH_ISSUER` | Issuer URL (public) | `http://127.0.0.1:9000` |
 | `AUTH_DATABASE_URL` | SQLAlchemy DB URL | `sqlite:///./auth_server.db` |
+| `OAUTH_SIGNING_KEY_PATH` | Path to RSA PEM for signing tokens | `.auth_signing_key.pem` |
+| `OAUTH_REFRESH_TOKEN_EXPIRES` | Refresh token lifetime (seconds) | `86400` (24h) |
 | **Optional seed (no default credentials)** | | |
 | `OAUTH_SEED_USER` | Create a login user with this username | — |
 | `OAUTH_SEED_PASSWORD` | Password for that user (hashed with bcrypt) | — |

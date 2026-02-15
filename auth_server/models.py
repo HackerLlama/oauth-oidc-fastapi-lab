@@ -60,3 +60,18 @@ class AuthorizationCode(Base):
     created_at: Mapped[datetime] = mapped_column(DateTime, default=_utc_now)
 
     user: Mapped["User"] = relationship("User", backref="authorization_codes")
+
+
+class RefreshToken(Base):
+    __tablename__ = "refresh_tokens"
+
+    id: Mapped[int] = mapped_column(primary_key=True, autoincrement=True)
+    token: Mapped[str] = mapped_column(String(512), unique=True, nullable=False, index=True)
+    user_id: Mapped[int] = mapped_column(ForeignKey("users.id"), nullable=False)
+    client_id: Mapped[str] = mapped_column(String(255), nullable=False, index=True)
+    scope: Mapped[str] = mapped_column(Text, nullable=False)  # space-separated
+    expires_at: Mapped[datetime] = mapped_column(DateTime, nullable=False)
+    revoked: Mapped[bool] = mapped_column(Boolean, default=False, nullable=False)
+    created_at: Mapped[datetime] = mapped_column(DateTime, default=_utc_now)
+
+    user: Mapped["User"] = relationship("User", backref="refresh_tokens")

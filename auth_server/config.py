@@ -22,5 +22,8 @@ API_AUDIENCE = os.environ.get("OAUTH_API_AUDIENCE", "http://127.0.0.1:7000")
 # Access token lifetime (seconds). PROJECT_CONTEXT: short-lived (10 minutes)
 ACCESS_TOKEN_EXPIRES = 600
 
+# Refresh token lifetime (seconds). Long-lived for obtaining new access tokens without re-auth.
+REFRESH_TOKEN_EXPIRES = int(os.environ.get("OAUTH_REFRESH_TOKEN_EXPIRES", "86400"))  # default 24h
+
 # Path to RSA private key PEM file for signing tokens. If unset or file missing, a key is generated and saved to .auth_signing_key.pem (no secret in code).
 SIGNING_KEY_PATH = os.environ.get("OAUTH_SIGNING_KEY_PATH", ".auth_signing_key.pem")
