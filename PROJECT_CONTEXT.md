@@ -127,9 +127,15 @@ Use SQLAlchemy for:
 - Users
 - OAuth Clients
 - Authorization Codes
-- (later) Refresh Tokens
+- Refresh Tokens
 
 SQLite is acceptable for development.
+
+---
+
+# Project plan
+
+The implementation plan is in [MILESTONES.md](MILESTONES.md): **M0–M6** (core OAuth2/OIDC flow, UserInfo, consent, refresh, revocation) and **M7–M14** (client refresh, introspection, client auth, logout, key rotation, scope refinement, audit logging, rate limiting). Implement incrementally in that order.
 
 ---
 
