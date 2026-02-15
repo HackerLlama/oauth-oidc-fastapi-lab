@@ -43,17 +43,19 @@ If no clients exist at startup, a default dev client is created: `client_id=test
 
 ## Quick start (all defaults)
 
+**Mandatory for a working login flow:** only the auth server needs env vars. You must set `OAUTH_SEED_USER` and `OAUTH_SEED_PASSWORD` before starting the auth server so at least one user exists; otherwise login will always fail. The client and resource server need no env vars when using the default topology (ports 9000, 8000, 7000).
+
 ```bash
-# 1. Auth server: create one user (required to log in)
+# 1. Auth server: set seed user (mandatory for login; no default credentials)
 export OAUTH_SEED_USER=alice
 export OAUTH_SEED_PASSWORD=yourpassword
 python -m auth_server.main
 
-# 2. Client (separate terminal; defaults match dev client)
+# 2. Client (separate terminal; no env needed — defaults match dev client)
 python -m client_web.main
 
-# 3. Resource server (separate terminal)
+# 3. Resource server (separate terminal; no env needed)
 python -m resource_server.main
 ```
 
-If you set `OAUTH_CLIENT_ID` and `OAUTH_REDIRECT_URI` on the auth server, they register an extra client; otherwise the default dev client is used so the client_web can log in.
+If you set `OAUTH_CLIENT_ID` and `OAUTH_REDIRECT_URI` on the auth server, they register an extra client; otherwise the default dev client (`test-client`, `http://127.0.0.1:8000/callback`) is created so the client_web can log in.
