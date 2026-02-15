@@ -65,6 +65,7 @@ def test_openid_configuration(client, seeded):
     assert data.get("issuer") == ISSUER
     assert data.get("authorization_endpoint") == f"{ISSUER}/authorize"
     assert data.get("token_endpoint") == f"{ISSUER}/token"
+    assert data.get("userinfo_endpoint") == f"{ISSUER}/userinfo"
     assert data.get("jwks_uri") == f"{ISSUER}/.well-known/jwks.json"
     assert "code" in data.get("response_types_supported", [])
     assert "S256" in data.get("code_challenge_methods_supported", [])

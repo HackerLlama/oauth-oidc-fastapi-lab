@@ -142,7 +142,8 @@ def test_authorize_post_invalid_credentials(client, seeded_db):
     assert "Log in" in response.text
 
 
-def test_authorize_post_success_redirects_with_code(client, seeded_db):
+def test_authorize_post_success_shows_consent(client, seeded_db):
+    """After login, consent page is shown (M5); no redirect until user Allows/Denies."""
     response = client.post(
         "/authorize",
         data={
@@ -153,6 +154,50 @@ def test_authorize_post_success_redirects_with_code(client, seeded_db):
             "response_type": "code",
             "username": "testuser",
             "password": "testpass",
+            "code_challenge": "x",
+            "code_challenge_method": "S256",
+        },
+        follow_redirects=False,
+    )
+    assert response.status_code == 200
+    assert "Consent" in response.text
+    assert "test-client" in response.text
+    assert "Allow" in response.text and "Deny" in response.text
+    assert "/authorize/confirm" in response.text
+
+
+def test_authorize_confirm_allow_redirects_with_code(client, seeded_db):
+    """Allow on consent creates code and redirects to client."""
+    # First get to consent (login)
+    client.post(
+        "/authorize",
+        data={
+            "client_id": "test-client",
+            "redirect_uri": "http://127.0.0.1:8000/callback",
+            "scope": "api.read",
+            "state": "mystate",
+            "response_type": "code",
+            "username": "testuser",
+            "password": "testpass",
+            "code_challenge": "x",
+            "code_challenge_method": "S256",
+        },
+    )
+    db = SessionLocal()
+    user_id = db.query(User).filter(User.username == "testuser").first().id
+    db.close()
+
+    response = client.post(
+        "/authorize/confirm",
+        data={
+            "user_id": user_id,
+            "client_id": "test-client",
+            "redirect_uri": "http://127.0.0.1:8000/callback",
+            "scope": "api.read",
+            "state": "mystate",
+            "allow": "true",
+            "code_challenge": "x",
+            "code_challenge_method": "S256",
         },
         follow_redirects=False,
     )
@@ -161,7 +206,6 @@ def test_authorize_post_success_redirects_with_code(client, seeded_db):
     assert location.startswith("http://127.0.0.1:8000/callback?")
     assert "code=" in location
     assert "state=mystate" in location
-    # Code should be in DB
     db = SessionLocal()
     try:
         codes = db.query(AuthorizationCode).filter(AuthorizationCode.client_id == "test-client").all()
@@ -170,6 +214,31 @@ def test_authorize_post_success_redirects_with_code(client, seeded_db):
         assert codes[-1].scope == "api.read"
     finally:
         db.close()
+
+
+def test_authorize_confirm_deny_redirects_with_access_denied(client, seeded_db):
+    """Deny on consent redirects to client with error=access_denied."""
+    db = SessionLocal()
+    user_id = db.query(User).filter(User.username == "testuser").first().id
+    db.close()
+
+    response = client.post(
+        "/authorize/confirm",
+        data={
+            "user_id": user_id,
+            "client_id": "test-client",
+            "redirect_uri": "http://127.0.0.1:8000/callback",
+            "scope": "api.read",
+            "state": "mystate",
+            "allow": "false",
+        },
+        follow_redirects=False,
+    )
+    assert response.status_code == 302
+    location = response.headers["location"]
+    assert "http://127.0.0.1:8000/callback?" in location
+    assert "error=access_denied" in location
+    assert "state=mystate" in location
 
 
 def test_authorize_post_invalid_scope_redirects_with_error(client, seeded_db):

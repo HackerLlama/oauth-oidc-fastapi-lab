@@ -176,23 +176,87 @@ def authorize_post(
 </html>"""
         return HTMLResponse(body, status_code=401)
 
-    # Create authorization code: short-lived, single-use (PROJECT_CONTEXT)
-    expires_at = datetime.now(timezone.utc) + timedelta(seconds=CODE_TTL_SECONDS)
-    code = secrets.token_urlsafe(32)
-    db.add(
-        AuthorizationCode(
-            code=code,
-            client_id=client_id,
-            redirect_uri=redirect_uri,
-            user_id=user.id,
-            scope=normalized_scope,
-            code_challenge=code_challenge if code_challenge else None,
-            code_challenge_method=code_challenge_method if code_challenge_method else None,
-            nonce=nonce if nonce else None,
-            expires_at=expires_at,
-        )
-    )
-    db.commit()
+    # Consent step (M5): show Allow/Deny before issuing code
+    def e(s: str) -> str:
+        return html.escape(s or "")
 
-    params = {"code": code, "state": state}
-    return RedirectResponse(url=f"{redirect_uri}?{urlencode(params)}", status_code=302)
+    scope_display = normalized_scope or "(none)"
+    body = f"""<!DOCTYPE html>
+<html>
+<head><meta charset="utf-8"><title>Consent</title></head>
+<body>
+  <h1>Consent</h1>
+  <p><strong>{e(client_id)}</strong> requests the following scopes: {e(scope_display)}</p>
+  <form method="post" action="/authorize/confirm" style="display:inline;">
+    <input type="hidden" name="user_id" value="{user.id}"/>
+    <input type="hidden" name="client_id" value="{e(client_id)}"/>
+    <input type="hidden" name="redirect_uri" value="{e(redirect_uri)}"/>
+    <input type="hidden" name="scope" value="{e(normalized_scope)}"/>
+    <input type="hidden" name="state" value="{e(state)}"/>
+    <input type="hidden" name="code_challenge" value="{e(code_challenge)}"/>
+    <input type="hidden" name="code_challenge_method" value="{e(code_challenge_method)}"/>
+    <input type="hidden" name="nonce" value="{e(nonce)}"/>
+    <input type="hidden" name="allow" value="true"/>
+    <button type="submit">Allow</button>
+  </form>
+  <form method="post" action="/authorize/confirm" style="display:inline;">
+    <input type="hidden" name="user_id" value="{user.id}"/>
+    <input type="hidden" name="client_id" value="{e(client_id)}"/>
+    <input type="hidden" name="redirect_uri" value="{e(redirect_uri)}"/>
+    <input type="hidden" name="scope" value="{e(normalized_scope)}"/>
+    <input type="hidden" name="state" value="{e(state)}"/>
+    <input type="hidden" name="code_challenge" value="{e(code_challenge)}"/>
+    <input type="hidden" name="code_challenge_method" value="{e(code_challenge_method)}"/>
+    <input type="hidden" name="nonce" value="{e(nonce)}"/>
+    <input type="hidden" name="allow" value="false"/>
+    <button type="submit">Deny</button>
+  </form>
+</body>
+</html>"""
+    return HTMLResponse(body)
+
+
+@router.post("/authorize/confirm")
+def authorize_confirm(
+    user_id: int = Form(...),
+    client_id: str = Form(...),
+    redirect_uri: str = Form(...),
+    scope: str = Form(""),
+    state: str = Form(...),
+    allow: str = Form(...),
+    code_challenge: str | None = Form(None),
+    code_challenge_method: str | None = Form(None),
+    nonce: str | None = Form(None),
+    db: Session = Depends(get_db),
+):
+    """
+    Process consent. If allow: create authorization code and redirect to client. If deny: redirect with access_denied.
+    """
+    client = db.query(Client).filter(Client.client_id == client_id).first()
+    if not client or not client.redirect_uri_allowed(redirect_uri):
+        return HTMLResponse("<h1>Invalid request</h1>", status_code=400)
+
+    if allow.lower() in ("true", "1", "yes", "allow"):
+        user = db.query(User).filter(User.id == user_id).first()
+        if not user:
+            return HTMLResponse("<h1>Invalid request</h1>", status_code=400)
+        expires_at = datetime.now(timezone.utc) + timedelta(seconds=CODE_TTL_SECONDS)
+        code = secrets.token_urlsafe(32)
+        db.add(
+            AuthorizationCode(
+                code=code,
+                client_id=client_id,
+                redirect_uri=redirect_uri,
+                user_id=user_id,
+                scope=scope if scope else None,
+                code_challenge=code_challenge if code_challenge else None,
+                code_challenge_method=code_challenge_method if code_challenge_method else None,
+                nonce=nonce if nonce else None,
+                expires_at=expires_at,
+            )
+        )
+        db.commit()
+        params = {"code": code, "state": state}
+        return RedirectResponse(url=f"{redirect_uri}?{urlencode(params)}", status_code=302)
+    # Deny
+    return _redirect_error(redirect_uri, "access_denied", "User denied authorization", state)

@@ -27,13 +27,15 @@ def init_db() -> None:
     Base.metadata.create_all(bind=engine)
     if "sqlite" in DATABASE_URL:
         with engine.connect() as conn:
-            try:
-                conn.execute(text("ALTER TABLE authorization_codes ADD COLUMN nonce VARCHAR(255)"))
-                conn.commit()
-            except Exception:
-                conn.rollback()
-                # Column may already exist
-                pass
+            for col, typ in [("nonce", "VARCHAR(255)"), ("name", "VARCHAR(255)"), ("email", "VARCHAR(255)")]:
+                table = "authorization_codes" if col == "nonce" else "users"
+                try:
+                    conn.execute(text(f"ALTER TABLE {table} ADD COLUMN {col} {typ}"))
+                    conn.commit()
+                except Exception:
+                    conn.rollback()
+                    # Column may already exist
+                    pass
 
 
 def get_db():

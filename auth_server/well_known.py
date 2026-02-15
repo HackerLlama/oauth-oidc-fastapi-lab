@@ -22,6 +22,7 @@ def openid_configuration():
         "issuer": ISSUER,
         "authorization_endpoint": f"{ISSUER}/authorize",
         "token_endpoint": f"{ISSUER}/token",
+        "userinfo_endpoint": f"{ISSUER}/userinfo",
         "jwks_uri": f"{ISSUER}/.well-known/jwks.json",
         "response_types_supported": ["code"],
         "scopes_supported": ["openid", "profile", "email", "api.read", "api.admin"],
