@@ -52,10 +52,10 @@ pytest resource_server/tests/ -v
 |------|--------|
 | [PROJECT_CONTEXT.md](PROJECT_CONTEXT.md) | Ports, flows, scopes, token format, endpoints, security rules |
 | [MILESTONES.md](MILESTONES.md) | Step-by-step implementation plan and prerequisite links |
+| [docs/](docs/README.md) | API specs (OpenAPI YAML for all three services) and [ENV reference](docs/ENV.md) |
 | `auth_server/` | Authorization Server app |
 | `client_web/` | Client web app |
 | `resource_server/` | Resource Server app + JWT/JWKS auth |
-| `docs/` | Extra docs (e.g. endpoints, threat model) |
 
 ---
 

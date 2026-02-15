@@ -1,0 +1,102 @@
+openapi: 3.0.3
+info:
+  title: Client Web API
+  description: |
+    OAuth2 + OIDC web client for the FastAPI Lab. Initiates login via Authorization Code + PKCE,
+    handles callback from the Authorization Server, and exchanges the code for tokens.
+  version: 0.3.0
+  contact: {}
+servers:
+  - url: http://127.0.0.1:8000
+    description: Local development (default)
+paths:
+  /health:
+    get:
+      summary: Health check
+      operationId: health
+      responses:
+        '200':
+          description: Service is healthy
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  status:
+                    type: string
+                    example: ok
+                  service:
+                    type: string
+                    example: client_web
+  /:
+    get:
+      summary: Home page
+      description: Home page with link to start login.
+      operationId: home
+      responses:
+        '200':
+          description: HTML page with "Log in" link
+          content:
+            text/html:
+              schema:
+                type: string
+  /start-login:
+    get:
+      summary: Start login flow
+      description: |
+        Generates state, nonce, and PKCE verifier + challenge; stores them for the callback;
+        redirects (302) to the Authorization Server /authorize with all required parameters.
+      operationId: startLogin
+      responses:
+        '302':
+          description: Redirect to AS /authorize with response_type=code, client_id, redirect_uri, scope, state, code_challenge, code_challenge_method, nonce
+          headers:
+            Location:
+              description: URL of AS authorize endpoint with query params
+              schema:
+                type: string
+                example: http://127.0.0.1:9000/authorize?response_type=code&client_id=...
+  /callback:
+    get:
+      summary: OAuth callback
+      description: |
+        Handles redirect from the Authorization Server after login/consent. Query params
+        include either code and state (success) or error, error_description, and state (failure).
+        On success, exchanges code for tokens via AS POST /token and displays result (HTML).
+      operationId: callback
+      parameters:
+        - name: code
+          in: query
+          description: Authorization code (on success)
+          schema:
+            type: string
+        - name: state
+          in: query
+          description: State value (required; must match value from /start-login)
+          schema:
+            type: string
+        - name: error
+          in: query
+          description: Error code from AS (e.g. access_denied, invalid_scope)
+          schema:
+            type: string
+        - name: error_description
+          in: query
+          description: Human-readable error description
+          schema:
+            type: string
+      responses:
+        '200':
+          description: Success page (HTML) with token info, or error page
+          content:
+            text/html:
+              schema:
+                type: string
+        '400':
+          description: Missing state, invalid/expired state, missing code, or error from AS
+          content:
+            text/html:
+              schema:
+                type: string
+        '502':
+          description: Token exchange failed (e.g. AS unreachable)

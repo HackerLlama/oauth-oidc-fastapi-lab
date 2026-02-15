@@ -1,0 +1,107 @@
+openapi: 3.0.3
+info:
+  title: Resource Server (Protected API) API
+  description: |
+    Protected API for the OAuth2 + OIDC FastAPI Lab. Validates access tokens via JWKS from the
+    Authorization Server. Public endpoint is unauthenticated; /me requires api.read scope;
+    /admin requires api.admin scope.
+  version: 0.1.0
+  contact: {}
+servers:
+  - url: http://127.0.0.1:7000
+    description: Local development (default)
+paths:
+  /health:
+    get:
+      summary: Health check
+      operationId: health
+      responses:
+        '200':
+          description: Service is healthy
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  status:
+                    type: string
+                    example: ok
+                  service:
+                    type: string
+                    example: resource_server
+  /public:
+    get:
+      summary: Public endpoint
+      description: No authentication required.
+      operationId: public
+      responses:
+        '200':
+          description: Public data
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  message:
+                    type: string
+                    example: Public data
+                  access:
+                    type: string
+                    example: anonymous
+  /me:
+    get:
+      summary: Authenticated user info
+      description: Requires a valid Bearer access token with scope api.read. Returns caller identity (sub) from the token.
+      operationId: me
+      security:
+        - bearerAuth: [api.read]
+      responses:
+        '200':
+          description: Authenticated response
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  message:
+                    type: string
+                    example: Authenticated
+                  sub:
+                    type: string
+                    description: Subject (user id) from token
+        '401':
+          description: Missing or invalid token
+        '403':
+          description: Token valid but missing api.read scope
+  /admin:
+    get:
+      summary: Admin endpoint
+      description: Requires a valid Bearer access token with scope api.admin.
+      operationId: admin
+      security:
+        - bearerAuth: [api.admin]
+      responses:
+        '200':
+          description: Admin response
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  message:
+                    type: string
+                    example: Admin access
+                  sub:
+                    type: string
+                    description: Subject (user id) from token
+        '401':
+          description: Missing or invalid token
+        '403':
+          description: Token valid but missing api.admin scope
+components:
+  securitySchemes:
+    bearerAuth:
+      type: http
+      scheme: bearer
+      bearerFormat: JWT
+      description: Access token (JWT) issued by the Authorization Server; audience http://127.0.0.1:7000

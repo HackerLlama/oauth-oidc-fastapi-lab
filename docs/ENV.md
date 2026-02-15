@@ -2,6 +2,8 @@
 
 No credentials are hardcoded. Use these env vars to configure each service. Defaults match PROJECT_CONTEXT (ports 9000, 8000, 7000).
 
+For API endpoint details, see the [OpenAPI specs](README.md) in this folder.
+
 ---
 
 ## Authorization Server (auth_server, port 9000)

@@ -89,8 +89,8 @@ GET  /authorize
 POST /token
 GET  /.well-known/openid-configuration
 GET  /.well-known/jwks.json
-GET  /userinfo (later milestone)
-POST /revoke (later milestone)
+GET  /userinfo
+POST /revoke
 
 Client:
 
@@ -103,6 +103,8 @@ Resource Server:
 GET  /public
 GET  /me (requires api.read)
 GET  /admin (requires api.admin)
+
+**API specs:** OpenAPI 3.0 YAML for each service are in [docs/](docs/README.md): [auth server](docs/openapi-auth-server.yaml), [client web](docs/openapi-client-web.yaml), [resource server](docs/openapi-resource-server.yaml).
 
 ---
 

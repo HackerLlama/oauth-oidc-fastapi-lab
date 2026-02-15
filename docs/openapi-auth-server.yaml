@@ -1,0 +1,367 @@
+openapi: 3.0.3
+info:
+  title: Auth Server (OIDC Provider) API
+  description: |
+    Authorization Server for the OAuth2 + OIDC FastAPI Lab. Handles authorization (login + consent),
+    token exchange (authorization_code and refresh_token grants), UserInfo, revocation, and
+    discovery (JWKS, OpenID configuration).
+  version: 0.4.0
+  contact: {}
+servers:
+  - url: http://127.0.0.1:9000
+    description: Local development (default)
+paths:
+  /health:
+    get:
+      summary: Health check
+      operationId: health
+      responses:
+        '200':
+          description: Service is healthy
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  status:
+                    type: string
+                    example: ok
+                  service:
+                    type: string
+                    example: auth_server
+  /authorize:
+    get:
+      summary: Authorization endpoint (GET)
+      description: |
+        OAuth2 authorization request. Validates client_id, redirect_uri (exact match),
+        response_type=code, state. Renders login form (HTML) on success.
+      operationId: authorizeGet
+      parameters:
+        - name: response_type
+          in: query
+          required: true
+          schema:
+            type: string
+            enum: [code]
+        - name: client_id
+          in: query
+          required: true
+          schema:
+            type: string
+        - name: redirect_uri
+          in: query
+          required: true
+          schema:
+            type: string
+            format: uri
+        - name: scope
+          in: query
+          schema:
+            type: string
+            description: Space-separated; openid, profile, email, api.read, api.admin
+        - name: state
+          in: query
+          required: true
+          schema:
+            type: string
+        - name: code_challenge
+          in: query
+          schema:
+            type: string
+            description: PKCE S256 challenge
+        - name: code_challenge_method
+          in: query
+          schema:
+            type: string
+            enum: [S256]
+        - name: nonce
+          in: query
+          schema:
+            type: string
+            description: Required when openid scope requested
+      responses:
+        '200':
+          description: Login form (HTML)
+          content:
+            text/html:
+              schema:
+                type: string
+        '302':
+          description: Redirect to redirect_uri with error= (invalid_scope etc.)
+        '400':
+          description: Invalid request (e.g. missing params, unknown client)
+    post:
+      summary: Submit login
+      description: Process login credentials. On success returns consent page (HTML). On failure re-renders login with error.
+      operationId: authorizePost
+      requestBody:
+        required: true
+        content:
+          application/x-www-form-urlencoded:
+            schema:
+              type: object
+              required: [client_id, redirect_uri, state, response_type, username, password]
+              properties:
+                client_id:
+                  type: string
+                redirect_uri:
+                  type: string
+                scope:
+                  type: string
+                state:
+                  type: string
+                response_type:
+                  type: string
+                  enum: [code]
+                username:
+                  type: string
+                password:
+                  type: string
+                code_challenge:
+                  type: string
+                code_challenge_method:
+                  type: string
+                nonce:
+                  type: string
+      responses:
+        '200':
+          description: Consent page (Allow/Deny) or login form with error
+          content:
+            text/html:
+              schema:
+                type: string
+        '302':
+          description: Redirect to redirect_uri with error (e.g. invalid_scope)
+        '400':
+          description: Invalid request
+        '401':
+          description: Invalid username or password
+  /authorize/confirm:
+    post:
+      summary: Consent confirmation
+      description: Process Allow or Deny. Allow creates authorization code and redirects to client; Deny redirects with error=access_denied.
+      operationId: authorizeConfirm
+      requestBody:
+        required: true
+        content:
+          application/x-www-form-urlencoded:
+            schema:
+              type: object
+              required: [user_id, client_id, redirect_uri, state, allow]
+              properties:
+                user_id:
+                  type: integer
+                client_id:
+                  type: string
+                redirect_uri:
+                  type: string
+                scope:
+                  type: string
+                state:
+                  type: string
+                allow:
+                  type: string
+                  description: "true / false (or yes, 1, allow)"
+                code_challenge:
+                  type: string
+                code_challenge_method:
+                  type: string
+                nonce:
+                  type: string
+      responses:
+        '302':
+          description: Redirect to redirect_uri with code= and state= (Allow) or error=access_denied (Deny)
+        '400':
+          description: Invalid request
+  /token:
+    post:
+      summary: Token endpoint
+      description: |
+        - grant_type=authorization_code: exchange code for access_token, id_token (if openid scope), refresh_token.
+        - grant_type=refresh_token: exchange refresh_token for new tokens; rotates refresh token.
+      operationId: token
+      requestBody:
+        required: true
+        content:
+          application/x-www-form-urlencoded:
+            schema:
+              type: object
+              required: [grant_type, client_id]
+              properties:
+                grant_type:
+                  type: string
+                  enum: [authorization_code, refresh_token]
+                code:
+                  type: string
+                  description: Required for authorization_code
+                redirect_uri:
+                  type: string
+                  description: Required for authorization_code
+                client_id:
+                  type: string
+                code_verifier:
+                  type: string
+                  description: Required for authorization_code (PKCE)
+                refresh_token:
+                  type: string
+                  description: Required for refresh_token grant
+      responses:
+        '200':
+          description: Token response
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  access_token:
+                    type: string
+                  token_type:
+                    type: string
+                    example: Bearer
+                  expires_in:
+                    type: integer
+                  scope:
+                    type: string
+                  id_token:
+                    type: string
+                    description: Present when openid scope was granted
+                  refresh_token:
+                    type: string
+                  refresh_expires_in:
+                    type: integer
+        '400':
+          description: Error (invalid_grant, unsupported_grant_type, invalid_request)
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  error:
+                    type: string
+                  error_description:
+                    type: string
+  /userinfo:
+    get:
+      summary: OIDC UserInfo
+      description: Returns claims for the authenticated user. Requires Bearer access_token. Claims depend on token scope (sub always; profile -> name, preferred_username; email -> email).
+      operationId: userinfo
+      security:
+        - bearerAuth: []
+      responses:
+        '200':
+          description: User claims (JSON)
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  sub:
+                    type: string
+                  preferred_username:
+                    type: string
+                  name:
+                    type: string
+                  email:
+                    type: string
+        '401':
+          description: Invalid or expired token
+  /revoke:
+    post:
+      summary: Token revocation (RFC 7009)
+      description: Revoke a refresh or access token. Always returns 200 for valid requests (even if token unknown) to avoid leaking information.
+      operationId: revoke
+      requestBody:
+        required: true
+        content:
+          application/x-www-form-urlencoded:
+            schema:
+              type: object
+              required: [token]
+              properties:
+                token:
+                  type: string
+                token_type_hint:
+                  type: string
+                  enum: [access_token, refresh_token]
+      responses:
+        '200':
+          description: Token revoked or unknown (no body)
+        '400':
+          description: Invalid request (e.g. token missing)
+  /.well-known/jwks.json:
+    get:
+      summary: JSON Web Key Set
+      description: Public keys for token signature verification.
+      operationId: jwks
+      responses:
+        '200':
+          description: JWKS document
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  keys:
+                    type: array
+                    items:
+                      type: object
+                      properties:
+                        kty:
+                          type: string
+                          example: RSA
+                        alg:
+                          type: string
+                          example: RS256
+                        use:
+                          type: string
+                          example: sig
+                        kid:
+                          type: string
+                        n:
+                          type: string
+                        e:
+                          type: string
+  /.well-known/openid-configuration:
+    get:
+      summary: OpenID Connect discovery
+      description: Discovery document with issuer, endpoints, supported scopes and methods.
+      operationId: openidConfiguration
+      responses:
+        '200':
+          description: Discovery document
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  issuer:
+                    type: string
+                  authorization_endpoint:
+                    type: string
+                  token_endpoint:
+                    type: string
+                  userinfo_endpoint:
+                    type: string
+                  revocation_endpoint:
+                    type: string
+                  jwks_uri:
+                    type: string
+                  response_types_supported:
+                    type: array
+                    items:
+                      type: string
+                  scopes_supported:
+                    type: array
+                    items:
+                      type: string
+                  code_challenge_methods_supported:
+                    type: array
+                    items:
+                      type: string
+components:
+  securitySchemes:
+    bearerAuth:
+      type: http
+      scheme: bearer
+      bearerFormat: JWT
+      description: Access token issued by this server
