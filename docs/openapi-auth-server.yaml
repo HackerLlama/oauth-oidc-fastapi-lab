@@ -265,6 +265,55 @@ paths:
                     type: string
         '401':
           description: Invalid or expired token
+  /introspect:
+    post:
+      summary: Token introspection (RFC 7662)
+      description: |
+        Return whether the token is active and its claims. Caller must provide client_id (registered client).
+        For JWT access tokens: verify signature and exp; return active + scope, sub, exp, iss, aud.
+        For refresh tokens: look up in DB; return active + scope, sub, exp, client_id when valid.
+      operationId: introspect
+      requestBody:
+        required: true
+        content:
+          application/x-www-form-urlencoded:
+            schema:
+              type: object
+              required: [token, client_id]
+              properties:
+                token:
+                  type: string
+                token_type_hint:
+                  type: string
+                  enum: [access_token, refresh_token]
+                client_id:
+                  type: string
+      responses:
+        '200':
+          description: Introspection response (active boolean; when active, optional claims)
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  active:
+                    type: boolean
+                  scope:
+                    type: string
+                  sub:
+                    type: string
+                  exp:
+                    type: integer
+                  client_id:
+                    type: string
+                  iss:
+                    type: string
+                  aud:
+                    type: string
+        '401':
+          description: Invalid or unknown client_id
+        '400':
+          description: Invalid request (e.g. token missing)
   /revoke:
     post:
       summary: Token revocation (RFC 7009)

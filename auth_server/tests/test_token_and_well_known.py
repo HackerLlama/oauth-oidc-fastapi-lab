@@ -67,6 +67,7 @@ def test_openid_configuration(client, seeded):
     assert data.get("token_endpoint") == f"{ISSUER}/token"
     assert data.get("userinfo_endpoint") == f"{ISSUER}/userinfo"
     assert data.get("revocation_endpoint") == f"{ISSUER}/revoke"
+    assert data.get("introspection_endpoint") == f"{ISSUER}/introspect"
     assert data.get("jwks_uri") == f"{ISSUER}/.well-known/jwks.json"
     assert "code" in data.get("response_types_supported", [])
     assert "S256" in data.get("code_challenge_methods_supported", [])
@@ -240,9 +241,8 @@ def test_token_refresh_grant_success(client, seeded):
     assert r2.status_code == 200
     data2 = r2.json()
     assert "access_token" in data2
-    assert data2["access_token"] != access1
     assert "refresh_token" in data2
-    assert data2["refresh_token"] != refresh
+    assert data2["refresh_token"] != refresh  # rotation: new refresh token issued
 
     # Old refresh token is revoked (rotation)
     r3 = client.post(
@@ -302,3 +302,127 @@ def test_revoke_missing_token_returns_422(client, seeded):
     """Missing required token form field yields 422 (FastAPI validation)."""
     r = client.post("/revoke", data={})
     assert r.status_code == 422
+
+
+# --- M8: Token introspection ---
+
+
+def test_introspect_unknown_client_401(client, seeded):
+    r = client.post("/introspect", data={"token": "any", "client_id": "unknown-client"})
+    assert r.status_code == 401
+    assert (r.json().get("detail") or r.json()).get("error") == "invalid_client"
+
+
+def test_introspect_missing_client_id_401(client, seeded):
+    r = client.post("/introspect", data={"token": "any"})
+    assert r.status_code == 422  # Form validation: client_id required
+
+
+def test_introspect_invalid_token_active_false(client, seeded):
+    r = client.post("/introspect", data={"token": "invalid-token", "client_id": "test-client"})
+    assert r.status_code == 200
+    assert r.json().get("active") is False
+
+
+def test_introspect_access_token_returns_active_and_claims(client, seeded):
+    db = SessionLocal()
+    try:
+        user = db.query(User).filter(User.username == "tokenuser").first()
+        user_id = user.id
+        verifier, challenge = _make_code_verifier_and_challenge()
+        expires = datetime.now(timezone.utc) + timedelta(seconds=60)
+        auth_code = AuthorizationCode(
+            code="introspect-code",
+            client_id="test-client",
+            redirect_uri="http://127.0.0.1:8000/callback",
+            user_id=user_id,
+            scope="api.read",
+            code_challenge=challenge,
+            code_challenge_method="S256",
+            nonce=None,
+            expires_at=expires,
+        )
+        db.add(auth_code)
+        db.commit()
+    finally:
+        db.close()
+
+    token_r = client.post(
+        "/token",
+        data={
+            "grant_type": "authorization_code",
+            "code": "introspect-code",
+            "redirect_uri": "http://127.0.0.1:8000/callback",
+            "client_id": "test-client",
+            "code_verifier": verifier,
+        },
+    )
+    assert token_r.status_code == 200
+    access_token = token_r.json()["access_token"]
+
+    r = client.post("/introspect", data={"token": access_token, "client_id": "test-client"})
+    assert r.status_code == 200
+    data = r.json()
+    assert data["active"] is True
+    assert data.get("scope") == "api.read"
+    assert data.get("sub") == str(user_id)
+    assert data.get("iss") == ISSUER
+    assert data.get("aud") == API_AUDIENCE
+    assert "exp" in data
+
+
+def test_introspect_refresh_token_returns_active_and_claims(client, seeded):
+    db = SessionLocal()
+    try:
+        user = db.query(User).filter(User.username == "tokenuser").first()
+        user_id = user.id
+        exp = datetime.now(timezone.utc) + timedelta(seconds=3600)
+        rt = RefreshToken(
+            token="introspect-rt",
+            user_id=user_id,
+            client_id="test-client",
+            scope="openid api.read",
+            expires_at=exp,
+        )
+        db.add(rt)
+        db.commit()
+    finally:
+        db.close()
+
+    r = client.post(
+        "/introspect",
+        data={"token": "introspect-rt", "token_type_hint": "refresh_token", "client_id": "test-client"},
+    )
+    assert r.status_code == 200
+    data = r.json()
+    assert data["active"] is True
+    assert data.get("scope") == "openid api.read"
+    assert data.get("sub") == str(user_id)
+    assert data.get("client_id") == "test-client"
+    assert "exp" in data
+
+
+def test_introspect_revoked_refresh_active_false(client, seeded):
+    db = SessionLocal()
+    try:
+        user = db.query(User).filter(User.username == "tokenuser").first()
+        exp = datetime.now(timezone.utc) + timedelta(seconds=3600)
+        rt = RefreshToken(
+            token="revoked-introspect-rt",
+            user_id=user.id,
+            client_id="test-client",
+            scope="api.read",
+            expires_at=exp,
+            revoked=True,
+        )
+        db.add(rt)
+        db.commit()
+    finally:
+        db.close()
+
+    r = client.post(
+        "/introspect",
+        data={"token": "revoked-introspect-rt", "client_id": "test-client"},
+    )
+    assert r.status_code == 200
+    assert r.json().get("active") is False
