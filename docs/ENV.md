@@ -33,6 +33,7 @@ If no clients exist at startup, a default dev client is created: `client_id=test
 | `OAUTH_CLIENT_ID` | Client ID (must be registered at AS) | `test-client` |
 | `OAUTH_REDIRECT_URI` | Callback URL for this app | `http://127.0.0.1:8000/callback` |
 | `OAUTH_SCOPE` | Requested scopes | `openid api.read` |
+| `OAUTH_RESOURCE_SERVER_URL` | Resource server base URL (for Call /me) | `http://127.0.0.1:7000` |
 
 ---
 

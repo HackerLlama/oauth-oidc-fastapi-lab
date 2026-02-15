@@ -14,3 +14,6 @@ REDIRECT_URI = os.environ.get("OAUTH_REDIRECT_URI", "http://127.0.0.1:8000/callb
 
 # Default scopes: openid (so nonce is required) + api.read for resource server
 DEFAULT_SCOPE = os.environ.get("OAUTH_SCOPE", "openid api.read")
+
+# Resource Server base URL (for M7: call /me, /admin, etc.)
+RESOURCE_SERVER_URL = os.environ.get("OAUTH_RESOURCE_SERVER_URL", "http://127.0.0.1:7000").rstrip("/")

@@ -100,3 +100,20 @@ paths:
                 type: string
         '502':
           description: Token exchange failed (e.g. AS unreachable)
+  /call-me:
+    get:
+      summary: Call resource server /me (M7)
+      description: |
+        Uses stored access token to call the resource server GET /me. If no tokens, prompts to log in.
+        On 401, exchanges refresh_token for new tokens at the AS, then retries /me once.
+        Optionally refreshes proactively when access token is near expiry.
+      operationId: callMe
+      responses:
+        '200':
+          description: HTML page with RS response (status and body) or "No tokens" / error
+          content:
+            text/html:
+              schema:
+                type: string
+        '502':
+          description: Resource server or AS unreachable
