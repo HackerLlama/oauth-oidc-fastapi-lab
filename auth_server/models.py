@@ -52,6 +52,7 @@ class AuthorizationCode(Base):
     scope: Mapped[str] = mapped_column(Text, nullable=False)  # space-separated
     code_challenge: Mapped[str | None] = mapped_column(String(255), nullable=True)
     code_challenge_method: Mapped[str | None] = mapped_column(String(16), nullable=True)
+    nonce: Mapped[str | None] = mapped_column(String(255), nullable=True)  # for ID token when openid scope
     expires_at: Mapped[datetime] = mapped_column(DateTime, nullable=False)
     used: Mapped[bool] = mapped_column(Boolean, default=False, nullable=False)
     created_at: Mapped[datetime] = mapped_column(DateTime, default=_utc_now)

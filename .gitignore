@@ -8,3 +8,4 @@ htmlcov/
 *.db
 .env
 .env.local
+.auth_signing_key.pem

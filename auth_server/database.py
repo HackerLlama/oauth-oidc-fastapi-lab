@@ -1,7 +1,7 @@
 """
 Database engine and session for auth server. SQLite per PROJECT_CONTEXT.
 """
-from sqlalchemy import create_engine
+from sqlalchemy import create_engine, text
 from sqlalchemy.orm import sessionmaker
 from sqlalchemy.pool import StaticPool
 
@@ -23,8 +23,17 @@ SessionLocal = sessionmaker(autocommit=False, autoflush=False, bind=engine)
 
 
 def init_db() -> None:
-    """Create all tables."""
+    """Create all tables and run simple migrations (e.g. add nonce column for M4)."""
     Base.metadata.create_all(bind=engine)
+    if "sqlite" in DATABASE_URL:
+        with engine.connect() as conn:
+            try:
+                conn.execute(text("ALTER TABLE authorization_codes ADD COLUMN nonce VARCHAR(255)"))
+                conn.commit()
+            except Exception:
+                conn.rollback()
+                # Column may already exist
+                pass
 
 
 def get_db():

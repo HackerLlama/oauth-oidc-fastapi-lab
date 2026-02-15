@@ -1,11 +1,12 @@
 """
-Client Web App — Milestone 3.
-Generate state, nonce, PKCE verifier + challenge; redirect to AS. GET /, /start-login, /callback.
-Port 8000 per PROJECT_CONTEXT.md.
+Client Web App — Milestone 4.
+Generate state, nonce, PKCE; redirect to AS; callback exchanges code for tokens.
+GET /, /start-login, /callback. Port 8000 per PROJECT_CONTEXT.md.
 """
 import html
 from urllib.parse import parse_qs
 
+import httpx
 from fastapi import FastAPI, Request
 from fastapi.responses import HTMLResponse, RedirectResponse
 
@@ -124,16 +125,78 @@ def callback(request: Request):
             status_code=400,
         )
 
-    # State valid; we have code_verifier in flow for M4 token exchange
-    code_display = html.escape(code) if code else "(none)"
+    if not code:
+        return HTMLResponse(
+            """<!DOCTYPE html>
+<html>
+<head><meta charset="utf-8"><title>Error</title></head>
+<body>
+  <h1>Error</h1>
+  <p>Missing code parameter.</p>
+  <p><a href="/">Home</a></p>
+</body>
+</html>""",
+            status_code=400,
+        )
+
+    # Exchange code for tokens (Milestone 4)
+    try:
+        r = httpx.post(
+            f"{ISSUER}/token",
+            data={
+                "grant_type": "authorization_code",
+                "code": code,
+                "redirect_uri": REDIRECT_URI,
+                "client_id": CLIENT_ID,
+                "code_verifier": flow.code_verifier,
+            },
+            headers={"Accept": "application/json"},
+            timeout=10.0,
+        )
+    except Exception as e:
+        return HTMLResponse(
+            f"""<!DOCTYPE html>
+<html>
+<head><meta charset="utf-8"><title>Token error</title></head>
+<body>
+  <h1>Token exchange failed</h1>
+  <p>{html.escape(str(e))}</p>
+  <p><a href="/">Home</a></p>
+</body>
+</html>""",
+            status_code=502,
+        )
+
+    if r.status_code != 200:
+        err = r.json() if r.headers.get("content-type", "").startswith("application/json") else {}
+        err_desc = err.get("error_description", err.get("error", r.text)) or "Token exchange failed"
+        return HTMLResponse(
+            f"""<!DOCTYPE html>
+<html>
+<head><meta charset="utf-8"><title>Token error</title></head>
+<body>
+  <h1>Token exchange failed</h1>
+  <p>{html.escape(str(err_desc))}</p>
+  <p><a href="/">Home</a></p>
+</body>
+</html>""",
+            status_code=400,
+        )
+
+    data = r.json()
+    access_token = data.get("access_token", "")
+    id_token = data.get("id_token", "")
+    scope = data.get("scope", "")
+    has_id = "Yes" if id_token else "No"
     return HTMLResponse(
         f"""<!DOCTYPE html>
 <html>
 <head><meta charset="utf-8"><title>Login success</title></head>
 <body>
   <h1>Login success</h1>
-  <p>Authorization code received (token exchange in next milestone).</p>
-  <p><code>code</code>: <code>{code_display}</code></p>
+  <p>Access token and ID token received.</p>
+  <p>Scope: <code>{html.escape(scope)}</code></p>
+  <p>ID token received: {has_id}</p>
   <p><a href="/">Home</a></p>
 </body>
 </html>"""

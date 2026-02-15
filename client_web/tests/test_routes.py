@@ -1,4 +1,6 @@
-"""Tests for client_web routes (Milestone 3)."""
+"""Tests for client_web routes (Milestone 3 and 4)."""
+from unittest.mock import patch
+
 import pytest
 from fastapi.testclient import TestClient
 
@@ -46,10 +48,19 @@ def test_callback_unknown_state():
 
 def test_callback_valid_state_and_code():
     store_flow("valid-state-123", nonce="n", code_verifier="v")
-    r = client.get("/callback", params={"state": "valid-state-123", "code": "auth-code-xyz"})
+
+    class MockResponse:
+        status_code = 200
+        headers = {}
+
+        def json(self):
+            return {"access_token": "at", "token_type": "Bearer", "expires_in": 600, "scope": "api.read"}
+
+    with patch("client_web.main.httpx.post", return_value=MockResponse()):
+        r = client.get("/callback", params={"state": "valid-state-123", "code": "auth-code-xyz"})
     assert r.status_code == 200
     assert "success" in r.text.lower()
-    assert "auth-code-xyz" in r.text
+    assert "access token" in r.text.lower() or "token" in r.text.lower()
 
 
 def test_callback_error_from_as():

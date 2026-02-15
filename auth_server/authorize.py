@@ -93,6 +93,7 @@ def authorize_get(
     def e(s: str) -> str:
         return html.escape(s or "")
 
+    nonce_val = request.query_params.get("nonce", "")
     body = f"""<!DOCTYPE html>
 <html>
 <head><meta charset="utf-8"><title>Log in</title></head>
@@ -106,6 +107,7 @@ def authorize_get(
     <input type="hidden" name="response_type" value="code"/>
     <input type="hidden" name="code_challenge" value="{e(code_challenge)}"/>
     <input type="hidden" name="code_challenge_method" value="{e(code_challenge_method)}"/>
+    <input type="hidden" name="nonce" value="{e(nonce_val)}"/>
     <label>Username: <input type="text" name="username" required/></label><br/>
     <label>Password: <input type="password" name="password" required/></label><br/>
     <button type="submit">Log in</button>
@@ -127,6 +129,7 @@ def authorize_post(
     password: str = Form(...),
     code_challenge: str | None = Form(None),
     code_challenge_method: str | None = Form(None),
+    nonce: str | None = Form(None),
     db: Session = Depends(get_db),
 ):
     """
@@ -164,6 +167,7 @@ def authorize_post(
     <input type="hidden" name="response_type" value="code"/>
     <input type="hidden" name="code_challenge" value="{e(code_challenge)}"/>
     <input type="hidden" name="code_challenge_method" value="{e(code_challenge_method)}"/>
+    <input type="hidden" name="nonce" value="{e(nonce)}"/>
     <label>Username: <input type="text" name="username" value="{e(username)}"/></label><br/>
     <label>Password: <input type="password" name="password" required/></label><br/>
     <button type="submit">Log in</button>
@@ -184,6 +188,7 @@ def authorize_post(
             scope=normalized_scope,
             code_challenge=code_challenge if code_challenge else None,
             code_challenge_method=code_challenge_method if code_challenge_method else None,
+            nonce=nonce if nonce else None,
             expires_at=expires_at,
         )
     )
