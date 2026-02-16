@@ -27,8 +27,12 @@ def init_db() -> None:
     Base.metadata.create_all(bind=engine)
     if "sqlite" in DATABASE_URL:
         with engine.connect() as conn:
-            for col, typ in [("nonce", "VARCHAR(255)"), ("name", "VARCHAR(255)"), ("email", "VARCHAR(255)")]:
-                table = "authorization_codes" if col == "nonce" else "users"
+            for col, typ, table in [
+                ("nonce", "VARCHAR(255)", "authorization_codes"),
+                ("name", "VARCHAR(255)", "users"),
+                ("email", "VARCHAR(255)", "users"),
+                ("client_secret_hash", "VARCHAR(255)", "clients"),
+            ]:
                 try:
                     conn.execute(text(f"ALTER TABLE {table} ADD COLUMN {col} {typ}"))
                     conn.commit()

@@ -39,15 +39,17 @@ def seed_from_env(db: Session) -> None:
         else:
             logger.debug("User already exists: %s", seed_user)
 
-    # Optional seed client: client_id and redirect_uri(s) comma-separated
+    # Optional seed client: client_id and redirect_uri(s) comma-separated; optional client_secret (confidential)
     client_id = os.environ.get("OAUTH_CLIENT_ID")
     redirect_uris_str = os.environ.get("OAUTH_REDIRECT_URI") or os.environ.get("OAUTH_REDIRECT_URIS")
+    client_secret = os.environ.get("OAUTH_SEED_CLIENT_SECRET")
     if client_id and redirect_uris_str:
         uris = [u.strip() for u in redirect_uris_str.split(",") if u.strip()]
         if uris and db.query(Client).filter(Client.client_id == client_id).first() is None:
-            db.add(Client(client_id=client_id, redirect_uris=json.dumps(uris)))
+            secret_hash = hash_password(client_secret) if client_secret else None
+            db.add(Client(client_id=client_id, redirect_uris=json.dumps(uris), client_secret_hash=secret_hash))
             db.commit()
-            logger.info("Seeded client: %s", client_id)
+            logger.info("Seeded client: %s (confidential=%s)", client_id, bool(secret_hash))
         elif uris:
             logger.debug("Client already exists: %s", client_id)
 

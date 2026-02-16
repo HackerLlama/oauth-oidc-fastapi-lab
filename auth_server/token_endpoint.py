@@ -8,9 +8,10 @@ from base64 import urlsafe_b64encode
 from datetime import datetime, timezone, timedelta
 
 import jwt
-from fastapi import APIRouter, Depends, Form, HTTPException
+from fastapi import APIRouter, Depends, Form, HTTPException, Request
 from sqlalchemy.orm import Session
 
+from auth_server.client_auth import require_client_auth
 from auth_server.config import (
     ACCESS_TOKEN_EXPIRES,
     API_AUDIENCE,
@@ -83,10 +84,12 @@ def _issue_tokens(user: User, client_id: str, scope: str, nonce: str | None) -> 
 
 @router.post("/token")
 def token(
+    request: Request,
     grant_type: str = Form(...),
     code: str | None = Form(None),
     redirect_uri: str | None = Form(None),
     client_id: str = Form(...),
+    client_secret: str | None = Form(None),
     code_verifier: str | None = Form(None),
     refresh_token: str | None = Form(None),
     db: Session = Depends(get_db),
@@ -94,7 +97,10 @@ def token(
     """
     authorization_code: exchange code for access_token, id_token, refresh_token.
     refresh_token: exchange refresh_token for new access_token (and id_token if openid in scope); rotates refresh token.
+    Confidential clients must authenticate via Authorization Basic or client_id + client_secret in form (M9).
     """
+    client = require_client_auth(db, request, client_id, client_secret)
+    client_id = client.client_id
     if grant_type == "authorization_code":
         return _token_authorization_code(
             code=code, redirect_uri=redirect_uri, client_id=client_id, code_verifier=code_verifier, db=db

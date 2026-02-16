@@ -20,6 +20,7 @@ For API endpoint details, see the [OpenAPI specs](README.md) in this folder.
 | `OAUTH_CLIENT_ID` | Register a client with this `client_id` | — |
 | `OAUTH_REDIRECT_URI` | Allowed redirect URI(s), comma-separated | — |
 | `OAUTH_REDIRECT_URIS` | Alternative to `OAUTH_REDIRECT_URI` | — |
+| `OAUTH_SEED_CLIENT_SECRET` | If set, the seeded client is confidential; secret is hashed and stored | — |
 
 If no clients exist at startup, a default dev client is created: `client_id=test-client`, `redirect_uri=http://127.0.0.1:8000/callback`. You still need at least one user (via `OAUTH_SEED_USER` + `OAUTH_SEED_PASSWORD`) to log in.
 

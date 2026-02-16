@@ -34,6 +34,8 @@ class Client(Base):
     client_id: Mapped[str] = mapped_column(String(255), unique=True, nullable=False, index=True)
     # JSON array of allowed redirect URIs; exact match required
     redirect_uris: Mapped[str] = mapped_column(Text, nullable=False)  # stored as JSON string
+    # Confidential client: bcrypt hash of client_secret (M9); None = public client
+    client_secret_hash: Mapped[str | None] = mapped_column(String(255), nullable=True)
     created_at: Mapped[datetime] = mapped_column(DateTime, default=_utc_now)
 
     def get_redirect_uris_list(self) -> list[str]:
@@ -41,6 +43,10 @@ class Client(Base):
 
     def redirect_uri_allowed(self, uri: str) -> bool:
         return uri in self.get_redirect_uris_list()
+
+    @property
+    def is_confidential(self) -> bool:
+        return self.client_secret_hash is not None and len(self.client_secret_hash) > 0
 
 
 class AuthorizationCode(Base):

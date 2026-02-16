@@ -179,6 +179,8 @@ paths:
       description: |
         - grant_type=authorization_code: exchange code for access_token, id_token (if openid scope), refresh_token.
         - grant_type=refresh_token: exchange refresh_token for new tokens; rotates refresh token.
+        Confidential clients (those with a client_secret) must authenticate via client_secret in the form
+        or via Authorization: Basic (client_id:client_secret base64). Public clients omit client_secret.
       operationId: token
       requestBody:
         required: true
@@ -199,6 +201,9 @@ paths:
                   description: Required for authorization_code
                 client_id:
                   type: string
+                client_secret:
+                  type: string
+                  description: Required for confidential clients; optional for public clients. Alternative: Authorization Basic header.
                 code_verifier:
                   type: string
                   description: Required for authorization_code (PKCE)
@@ -229,6 +234,8 @@ paths:
                     type: string
                   refresh_expires_in:
                     type: integer
+        '401':
+          description: Invalid client (e.g. confidential client without or with wrong client_secret)
         '400':
           description: Error (invalid_grant, unsupported_grant_type, invalid_request)
           content:
@@ -270,6 +277,7 @@ paths:
       summary: Token introspection (RFC 7662)
       description: |
         Return whether the token is active and its claims. Caller must provide client_id (registered client).
+        Confidential clients must also send client_secret (form or Authorization Basic).
         For JWT access tokens: verify signature and exp; return active + scope, sub, exp, iss, aud.
         For refresh tokens: look up in DB; return active + scope, sub, exp, client_id when valid.
       operationId: introspect
@@ -288,6 +296,9 @@ paths:
                   enum: [access_token, refresh_token]
                 client_id:
                   type: string
+                client_secret:
+                  type: string
+                  description: Required for confidential clients; optional for public clients. Alternative: Authorization Basic.
       responses:
         '200':
           description: Introspection response (active boolean; when active, optional claims)
@@ -311,13 +322,15 @@ paths:
                   aud:
                     type: string
         '401':
-          description: Invalid or unknown client_id
+          description: Invalid or unknown client_id, or confidential client without valid client_secret
         '400':
           description: Invalid request (e.g. token missing)
   /revoke:
     post:
       summary: Token revocation (RFC 7009)
-      description: Revoke a refresh or access token. Always returns 200 for valid requests (even if token unknown) to avoid leaking information.
+      description: |
+        Revoke a refresh or access token. Always returns 200 for valid requests (even if token unknown) to avoid leaking information.
+        When revoking a refresh token that belongs to a confidential client, the client must authenticate with client_id and client_secret (form or Authorization Basic).
       operationId: revoke
       requestBody:
         required: true
@@ -332,9 +345,17 @@ paths:
                 token_type_hint:
                   type: string
                   enum: [access_token, refresh_token]
+                client_id:
+                  type: string
+                  description: Required when revoking a confidential client's refresh token.
+                client_secret:
+                  type: string
+                  description: Required when revoking a confidential client's refresh token. Alternative: Authorization Basic.
       responses:
         '200':
           description: Token revoked or unknown (no body)
+        '401':
+          description: Confidential client's refresh token revoke without valid client credentials
         '400':
           description: Invalid request (e.g. token missing)
   /.well-known/jwks.json:

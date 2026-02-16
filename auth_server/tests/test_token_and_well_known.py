@@ -1,7 +1,8 @@
 """
-Tests for POST /token and well-known endpoints (Milestone 4).
+Tests for POST /token and well-known endpoints (Milestone 4, 6, 8, 9).
 """
 import hashlib
+import json
 from base64 import urlsafe_b64encode
 from datetime import datetime, timedelta, timezone
 
@@ -304,6 +305,92 @@ def test_revoke_missing_token_returns_422(client, seeded):
     assert r.status_code == 422
 
 
+def test_revoke_confidential_client_without_auth_401(client, seeded):
+    """Revoking a refresh token of a confidential client without client_secret returns 401."""
+    from auth_server.seed import hash_password
+
+    db = SessionLocal()
+    try:
+        if db.query(Client).filter(Client.client_id == "conf-revoke").first() is None:
+            db.add(
+                Client(
+                    client_id="conf-revoke",
+                    redirect_uris=json.dumps(["http://127.0.0.1:8000/callback"]),
+                    client_secret_hash=hash_password("revoke-secret"),
+                )
+            )
+            db.commit()
+        user = db.query(User).filter(User.username == "tokenuser").first()
+        exp = datetime.now(timezone.utc) + timedelta(seconds=3600)
+        rt = RefreshToken(
+            token="conf-revoke-rt",
+            user_id=user.id,
+            client_id="conf-revoke",
+            scope="api.read",
+            expires_at=exp,
+        )
+        db.add(rt)
+        db.commit()
+    finally:
+        db.close()
+
+    r = client.post(
+        "/revoke",
+        data={"token": "conf-revoke-rt", "token_type_hint": "refresh_token", "client_id": "conf-revoke"},
+    )
+    assert r.status_code == 401
+    assert (r.json().get("detail") or r.json()).get("error") == "invalid_client"
+
+
+def test_revoke_confidential_client_with_auth_200(client, seeded):
+    """Revoking a refresh token of a confidential client with correct client_secret returns 200."""
+    from auth_server.seed import hash_password
+
+    db = SessionLocal()
+    try:
+        if db.query(Client).filter(Client.client_id == "conf-revoke").first() is None:
+            db.add(
+                Client(
+                    client_id="conf-revoke",
+                    redirect_uris=json.dumps(["http://127.0.0.1:8000/callback"]),
+                    client_secret_hash=hash_password("revoke-secret"),
+                )
+            )
+            db.commit()
+        user = db.query(User).filter(User.username == "tokenuser").first()
+        exp = datetime.now(timezone.utc) + timedelta(seconds=3600)
+        rt = RefreshToken(
+            token="conf-revoke-rt-2",
+            user_id=user.id,
+            client_id="conf-revoke",
+            scope="api.read",
+            expires_at=exp,
+        )
+        db.add(rt)
+        db.commit()
+    finally:
+        db.close()
+
+    r = client.post(
+        "/revoke",
+        data={
+            "token": "conf-revoke-rt-2",
+            "token_type_hint": "refresh_token",
+            "client_id": "conf-revoke",
+            "client_secret": "revoke-secret",
+        },
+    )
+    assert r.status_code == 200
+
+    db2 = SessionLocal()
+    try:
+        rt2 = db2.query(RefreshToken).filter(RefreshToken.token == "conf-revoke-rt-2").first()
+        assert rt2 is not None
+        assert rt2.revoked is True
+    finally:
+        db2.close()
+
+
 # --- M8: Token introspection ---
 
 
@@ -402,6 +489,107 @@ def test_introspect_refresh_token_returns_active_and_claims(client, seeded):
     assert "exp" in data
 
 
+def test_token_confidential_client_without_secret_401(client, seeded):
+    """Confidential client must send client_secret (or Basic); otherwise 401."""
+    import base64
+    from auth_server.seed import hash_password
+
+    db = SessionLocal()
+    try:
+        # Create confidential client
+        c = db.query(Client).filter(Client.client_id == "confidential-client").first()
+        if not c:
+            db.add(
+                Client(
+                    client_id="confidential-client",
+                    redirect_uris=json.dumps(["http://127.0.0.1:8000/callback"]),
+                    client_secret_hash=hash_password("secret123"),
+                )
+            )
+            db.commit()
+        user = db.query(User).filter(User.username == "tokenuser").first()
+        verifier, challenge = _make_code_verifier_and_challenge()
+        expires = datetime.now(timezone.utc) + timedelta(seconds=60)
+        auth_code = AuthorizationCode(
+            code="conf-code",
+            client_id="confidential-client",
+            redirect_uri="http://127.0.0.1:8000/callback",
+            user_id=user.id,
+            scope="api.read",
+            code_challenge=challenge,
+            code_challenge_method="S256",
+            nonce=None,
+            expires_at=expires,
+        )
+        db.add(auth_code)
+        db.commit()
+    finally:
+        db.close()
+
+    # No client_secret -> 401
+    r = client.post(
+        "/token",
+        data={
+            "grant_type": "authorization_code",
+            "code": "conf-code",
+            "redirect_uri": "http://127.0.0.1:8000/callback",
+            "client_id": "confidential-client",
+            "code_verifier": verifier,
+        },
+    )
+    assert r.status_code == 401
+    assert (r.json().get("detail") or r.json()).get("error") == "invalid_client"
+
+
+def test_token_confidential_client_with_secret_success(client, seeded):
+    """Confidential client with correct client_secret in form gets tokens."""
+    from auth_server.seed import hash_password
+
+    db = SessionLocal()
+    try:
+        if db.query(Client).filter(Client.client_id == "confidential-client").first() is None:
+            db.add(
+                Client(
+                    client_id="confidential-client",
+                    redirect_uris=json.dumps(["http://127.0.0.1:8000/callback"]),
+                    client_secret_hash=hash_password("secret123"),
+                )
+            )
+            db.commit()
+        user = db.query(User).filter(User.username == "tokenuser").first()
+        verifier, challenge = _make_code_verifier_and_challenge()
+        expires = datetime.now(timezone.utc) + timedelta(seconds=60)
+        auth_code = AuthorizationCode(
+            code="conf-code-2",
+            client_id="confidential-client",
+            redirect_uri="http://127.0.0.1:8000/callback",
+            user_id=user.id,
+            scope="api.read",
+            code_challenge=challenge,
+            code_challenge_method="S256",
+            nonce=None,
+            expires_at=expires,
+        )
+        db.add(auth_code)
+        db.commit()
+    finally:
+        db.close()
+
+    r = client.post(
+        "/token",
+        data={
+            "grant_type": "authorization_code",
+            "code": "conf-code-2",
+            "redirect_uri": "http://127.0.0.1:8000/callback",
+            "client_id": "confidential-client",
+            "client_secret": "secret123",
+            "code_verifier": verifier,
+        },
+    )
+    assert r.status_code == 200
+    assert "access_token" in r.json()
+
+
 def test_introspect_revoked_refresh_active_false(client, seeded):
     db = SessionLocal()
     try:
@@ -423,6 +611,58 @@ def test_introspect_revoked_refresh_active_false(client, seeded):
     r = client.post(
         "/introspect",
         data={"token": "revoked-introspect-rt", "client_id": "test-client"},
+    )
+    assert r.status_code == 200
+    assert r.json().get("active") is False
+
+
+def test_introspect_confidential_client_without_secret_401(client, seeded):
+    """Introspect with confidential client_id but no client_secret returns 401."""
+    from auth_server.seed import hash_password
+
+    db = SessionLocal()
+    try:
+        if db.query(Client).filter(Client.client_id == "conf-introspect").first() is None:
+            db.add(
+                Client(
+                    client_id="conf-introspect",
+                    redirect_uris=json.dumps(["http://127.0.0.1:8000/callback"]),
+                    client_secret_hash=hash_password("intro-secret"),
+                )
+            )
+            db.commit()
+    finally:
+        db.close()
+
+    r = client.post(
+        "/introspect",
+        data={"token": "any-token", "client_id": "conf-introspect"},
+    )
+    assert r.status_code == 401
+    assert (r.json().get("detail") or r.json()).get("error") == "invalid_client"
+
+
+def test_introspect_confidential_client_with_secret_200(client, seeded):
+    """Introspect with confidential client_id and correct client_secret returns 200 (active true/false per token)."""
+    from auth_server.seed import hash_password
+
+    db = SessionLocal()
+    try:
+        if db.query(Client).filter(Client.client_id == "conf-introspect").first() is None:
+            db.add(
+                Client(
+                    client_id="conf-introspect",
+                    redirect_uris=json.dumps(["http://127.0.0.1:8000/callback"]),
+                    client_secret_hash=hash_password("intro-secret"),
+                )
+            )
+            db.commit()
+    finally:
+        db.close()
+
+    r = client.post(
+        "/introspect",
+        data={"token": "invalid-token", "client_id": "conf-introspect", "client_secret": "intro-secret"},
     )
     assert r.status_code == 200
     assert r.json().get("active") is False
