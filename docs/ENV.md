@@ -35,6 +35,7 @@ If no clients exist at startup, a default dev client is created: `client_id=test
 | `OAUTH_REDIRECT_URI` | Callback URL for this app | `http://127.0.0.1:8000/callback` |
 | `OAUTH_SCOPE` | Requested scopes | `openid api.read` |
 | `OAUTH_RESOURCE_SERVER_URL` | Resource server base URL (for Call /me) | `http://127.0.0.1:7000` |
+| `OAUTH_POST_LOGOUT_REDIRECT_URI` | Where AS redirects after logout (M10); must be in client's redirect_uris at AS | `http://127.0.0.1:8000/logged-out` |
 
 ---
 

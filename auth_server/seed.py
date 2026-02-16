@@ -54,10 +54,27 @@ def seed_from_env(db: Session) -> None:
             logger.debug("Client already exists: %s", client_id)
 
     # Development fallback: ensure default dev client exists for client_web (PROJECT_CONTEXT topology)
-    # Create test-client if missing so quick start works even when DB already has other clients
+    # Include callback + post-logout redirect URIs for M10 RP-Initiated Logout
     default_client_id = "test-client"
-    default_redirect_uri = "http://127.0.0.1:8000/callback"
-    if db.query(Client).filter(Client.client_id == default_client_id).first() is None:
-        db.add(Client(client_id=default_client_id, redirect_uris=json.dumps([default_redirect_uri])))
+    default_redirect_uris = [
+        "http://127.0.0.1:8000/callback",
+        "http://127.0.0.1:8000/logged-out",
+        "http://127.0.0.1:8000/",
+    ]
+    default_client = db.query(Client).filter(Client.client_id == default_client_id).first()
+    if default_client is None:
+        db.add(Client(client_id=default_client_id, redirect_uris=json.dumps(default_redirect_uris)))
         db.commit()
         logger.info("Seeded default dev client: %s", default_client_id)
+    else:
+        # Ensure existing test-client has post-logout URIs (M10)
+        uris = default_client.get_redirect_uris_list()
+        updated = False
+        for u in default_redirect_uris:
+            if u not in uris:
+                uris.append(u)
+                updated = True
+        if updated:
+            default_client.redirect_uris = json.dumps(uris)
+            db.commit()
+            logger.info("Updated default client redirect_uris for logout")

@@ -1,6 +1,6 @@
 """
 In-memory store for tokens after successful login (M7).
-Stores access_token, refresh_token, expires_in, scope, issued_at for calling the resource server and refreshing on 401.
+Stores access_token, refresh_token, id_token (optional, M10), expires_in, scope, issued_at.
 Lab use only; single stored set (no per-user/session).
 """
 import time
@@ -14,6 +14,7 @@ class StoredTokens:
     expires_in: int
     scope: str
     issued_at: float
+    id_token: str | None = None
 
     def access_token_expired_or_soon(self, buffer_seconds: int = 60) -> bool:
         """
@@ -37,6 +38,7 @@ def store_tokens(
     refresh_token: str,
     expires_in: int,
     scope: str = "",
+    id_token: str | None = None,
 ) -> None:
     global _tokens
     _tokens = StoredTokens(
@@ -45,6 +47,7 @@ def store_tokens(
         expires_in=expires_in,
         scope=scope,
         issued_at=time.time(),
+        id_token=id_token,
     )
 
 

@@ -247,6 +247,40 @@ paths:
                     type: string
                   error_description:
                     type: string
+  /logout:
+    get:
+      summary: RP-Initiated Logout (OIDC)
+      description: |
+        OIDC RP-Initiated Logout. Accepts id_token_hint (optional), post_logout_redirect_uri (optional),
+        and state (optional). Validates post_logout_redirect_uri against the client's redirect_uris (client
+        from id_token_hint aud). Redirects to post_logout_redirect_uri with state, or shows a simple
+        "logged out" page if no valid hint or no redirect URI. Stateless AS: no server-side session cleared.
+      operationId: logout
+      parameters:
+        - name: id_token_hint
+          in: query
+          required: false
+          schema:
+            type: string
+            description: Current ID token (so AS can identify client and optionally session)
+        - name: post_logout_redirect_uri
+          in: query
+          required: false
+          schema:
+            type: string
+            format: uri
+        - name: state
+          in: query
+          required: false
+          schema:
+            type: string
+      responses:
+        '302':
+          description: Redirect to post_logout_redirect_uri with state (if URI allowed)
+        '200':
+          description: "Logged out" HTML page (no redirect when no hint or no URI)
+        '400':
+          description: Unknown client or post_logout_redirect_uri not allowed
   /userinfo:
     get:
       summary: OIDC UserInfo

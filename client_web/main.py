@@ -10,7 +10,14 @@ import httpx
 from fastapi import FastAPI, Request
 from fastapi.responses import HTMLResponse, RedirectResponse
 
-from client_web.config import CLIENT_ID, DEFAULT_SCOPE, ISSUER, REDIRECT_URI, RESOURCE_SERVER_URL
+from client_web.config import (
+    CLIENT_ID,
+    DEFAULT_SCOPE,
+    ISSUER,
+    POST_LOGOUT_REDIRECT_URI,
+    REDIRECT_URI,
+    RESOURCE_SERVER_URL,
+)
 from client_web.flow_store import get_flow, store_flow
 from client_web.pkce import build_authorize_url, generate_nonce, generate_pkce, generate_state
 from client_web.token_store import clear_tokens, get_tokens, store_tokens
@@ -24,17 +31,50 @@ def health():
     return {"status": "ok", "service": "client_web"}
 
 
+def _build_logout_url() -> str:
+    """Build AS RP-Initiated Logout URL with id_token_hint (if we have one), post_logout_redirect_uri, state (M10)."""
+    from urllib.parse import urlencode
+
+    tokens = get_tokens()
+    params = {
+        "post_logout_redirect_uri": POST_LOGOUT_REDIRECT_URI,
+        "state": generate_state(),
+    }
+    if tokens and tokens.id_token:
+        params["id_token_hint"] = tokens.id_token
+    return f"{ISSUER}/logout?{urlencode(params)}"
+
+
 @app.get("/", response_class=HTMLResponse)
 def home():
-    """Home page with link to start login and Call /me (M7)."""
+    """Home page with link to start login, Call /me, and Log out (M10)."""
+    logout_link = f'<p><a href="{_build_logout_url()}">Log out</a></p>' if get_tokens() else ""
     return HTMLResponse(
-        """<!DOCTYPE html>
+        f"""<!DOCTYPE html>
 <html>
 <head><meta charset="utf-8"><title>OAuth Client</title></head>
 <body>
   <h1>OAuth2 + OIDC Client</h1>
   <p><a href="/start-login">Log in</a></p>
   <p><a href="/call-me">Call /me</a> (resource server; requires login)</p>
+  {logout_link}
+</body>
+</html>"""
+    )
+
+
+@app.get("/logged-out", response_class=HTMLResponse)
+def logged_out():
+    """Landing page after RP-Initiated Logout; clear local tokens and show confirmation (M10)."""
+    clear_tokens()
+    return HTMLResponse(
+        """<!DOCTYPE html>
+<html>
+<head><meta charset="utf-8"><title>Logged out</title></head>
+<body>
+  <h1>Logged out</h1>
+  <p>You have been logged out.</p>
+  <p><a href="/">Home</a> | <a href="/start-login">Log in</a></p>
 </body>
 </html>"""
     )
@@ -190,9 +230,15 @@ def callback(request: Request):
     refresh_token = data.get("refresh_token", "")
     expires_in = data.get("expires_in", 0)
     scope = data.get("scope", "")
-    if access_token and refresh_token:
-        store_tokens(access_token=access_token, refresh_token=refresh_token, expires_in=expires_in, scope=scope)
     id_token = data.get("id_token", "")
+    if access_token and refresh_token:
+        store_tokens(
+            access_token=access_token,
+            refresh_token=refresh_token,
+            expires_in=expires_in,
+            scope=scope,
+            id_token=id_token or None,
+        )
     has_id = "Yes" if id_token else "No"
     return HTMLResponse(
         f"""<!DOCTYPE html>
@@ -204,6 +250,7 @@ def callback(request: Request):
   <p>Scope: <code>{html.escape(scope)}</code></p>
   <p>ID token received: {has_id}</p>
   <p><a href="/call-me">Call /me</a> (resource server)</p>
+  <p><a href="{_build_logout_url()}">Log out</a></p>
   <p><a href="/">Home</a></p>
 </body>
 </html>"""
@@ -261,6 +308,7 @@ def call_me():
                 refresh_token=data["refresh_token"],
                 expires_in=data.get("expires_in", tokens.expires_in),
                 scope=data.get("scope", tokens.scope),
+                id_token=data.get("id_token") or tokens.id_token,
             )
             tokens = get_tokens()
         else:
@@ -322,6 +370,7 @@ def call_me():
             refresh_token=data["refresh_token"],
             expires_in=data.get("expires_in", tokens.expires_in),
             scope=data.get("scope", tokens.scope),
+            id_token=data.get("id_token") or tokens.id_token,
         )
         tokens = get_tokens()
         try:
@@ -356,6 +405,7 @@ def call_me():
         body_str = html.escape(r.text[:500] if r.text else "(no body)")
     status = r.status_code
     refresh_msg = '<p><strong>Refresh token was used</strong> to obtain a new access token (see auth server log).</p>' if refresh_used else ''
+    logout_link = f' | <a href="{_build_logout_url()}">Log out</a>' if get_tokens() else ""
     return HTMLResponse(
         f"""<!DOCTYPE html>
 <html>
@@ -365,7 +415,7 @@ def call_me():
   {refresh_msg}
   <p>Status: {status}</p>
   <pre>{body_str}</pre>
-  <p><a href="/call-me">Call /me again</a> | <a href="/">Home</a></p>
+  <p><a href="/call-me">Call /me again</a> | <a href="/">Home</a>{logout_link}</p>
 </body>
 </html>"""
     )

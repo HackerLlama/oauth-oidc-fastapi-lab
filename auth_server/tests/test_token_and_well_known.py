@@ -29,10 +29,21 @@ def seeded(client):
         u = db.query(User).filter(User.username == "tokenuser").first()
         if not u:
             db.add(User(username="tokenuser", password_hash=hash_password("tokenpass")))
+        logout_uris = [
+            "http://127.0.0.1:8000/callback",
+            "http://127.0.0.1:8000/logged-out",
+            "http://127.0.0.1:8000/",
+        ]
         c = db.query(Client).filter(Client.client_id == "test-client").first()
         if not c:
-            import json
-            db.add(Client(client_id="test-client", redirect_uris=json.dumps(["http://127.0.0.1:8000/callback"])))
+            db.add(Client(client_id="test-client", redirect_uris=json.dumps(logout_uris)))
+        else:
+            uris = c.get_redirect_uris_list()
+            for u in logout_uris:
+                if u not in uris:
+                    uris.append(u)
+                    c.redirect_uris = json.dumps(uris)
+                    break
         db.commit()
         yield db
     finally:
@@ -69,6 +80,7 @@ def test_openid_configuration(client, seeded):
     assert data.get("userinfo_endpoint") == f"{ISSUER}/userinfo"
     assert data.get("revocation_endpoint") == f"{ISSUER}/revoke"
     assert data.get("introspection_endpoint") == f"{ISSUER}/introspect"
+    assert data.get("end_session_endpoint") == f"{ISSUER}/logout"
     assert data.get("jwks_uri") == f"{ISSUER}/.well-known/jwks.json"
     assert "code" in data.get("response_types_supported", [])
     assert "S256" in data.get("code_challenge_methods_supported", [])
@@ -666,3 +678,116 @@ def test_introspect_confidential_client_with_secret_200(client, seeded):
     )
     assert r.status_code == 200
     assert r.json().get("active") is False
+
+
+# --- M10: RP-Initiated Logout ---
+
+
+def test_logout_no_params_returns_logged_out_html(client, seeded):
+    """GET /logout with no id_token_hint shows simple logged-out page (no redirect to arbitrary URI)."""
+    r = client.get("/logout")
+    assert r.status_code == 200
+    assert "Logged out" in r.text or "logged out" in r.text.lower()
+
+
+def test_logout_with_valid_hint_and_redirect_uri_redirects(client, seeded):
+    """GET /logout with valid id_token_hint and allowed post_logout_redirect_uri returns 302 to that URI."""
+    db = SessionLocal()
+    try:
+        user = db.query(User).filter(User.username == "tokenuser").first()
+        verifier, challenge = _make_code_verifier_and_challenge()
+        expires = datetime.now(timezone.utc) + timedelta(seconds=60)
+        auth_code = AuthorizationCode(
+            code="logout-code",
+            client_id="test-client",
+            redirect_uri="http://127.0.0.1:8000/callback",
+            user_id=user.id,
+            scope="openid api.read",
+            code_challenge=challenge,
+            code_challenge_method="S256",
+            nonce="logout-nonce",
+            expires_at=expires,
+        )
+        db.add(auth_code)
+        db.commit()
+    finally:
+        db.close()
+
+    # Exchange code for tokens to get id_token
+    r_token = client.post(
+        "/token",
+        data={
+            "grant_type": "authorization_code",
+            "code": "logout-code",
+            "redirect_uri": "http://127.0.0.1:8000/callback",
+            "client_id": "test-client",
+            "code_verifier": verifier,
+        },
+    )
+    assert r_token.status_code == 200
+    id_token = r_token.json().get("id_token")
+    assert id_token
+
+    # Seed ensures test-client has http://127.0.0.1:8000/logged-out in redirect_uris
+    post_logout = "http://127.0.0.1:8000/logged-out"
+    state = "logout-state-123"
+    r = client.get(
+        "/logout",
+        params={
+            "id_token_hint": id_token,
+            "post_logout_redirect_uri": post_logout,
+            "state": state,
+        },
+        follow_redirects=False,
+    )
+    assert r.status_code == 302, f"Expected 302, got {r.status_code}: {r.text[:500]}"
+    loc = r.headers.get("location", "")
+    assert post_logout in loc
+    assert state in loc
+
+
+def test_logout_disallowed_redirect_uri_returns_400(client, seeded):
+    """GET /logout with post_logout_redirect_uri not in client's list returns 400."""
+    db = SessionLocal()
+    try:
+        user = db.query(User).filter(User.username == "tokenuser").first()
+        verifier, challenge = _make_code_verifier_and_challenge()
+        expires = datetime.now(timezone.utc) + timedelta(seconds=60)
+        auth_code = AuthorizationCode(
+            code="logout-code-2",
+            client_id="test-client",
+            redirect_uri="http://127.0.0.1:8000/callback",
+            user_id=user.id,
+            scope="openid api.read",
+            code_challenge=challenge,
+            code_challenge_method="S256",
+            nonce="n2",
+            expires_at=expires,
+        )
+        db.add(auth_code)
+        db.commit()
+    finally:
+        db.close()
+
+    r_token = client.post(
+        "/token",
+        data={
+            "grant_type": "authorization_code",
+            "code": "logout-code-2",
+            "redirect_uri": "http://127.0.0.1:8000/callback",
+            "client_id": "test-client",
+            "code_verifier": verifier,
+        },
+    )
+    assert r_token.status_code == 200
+    id_token = r_token.json().get("id_token")
+    assert id_token
+
+    r = client.get(
+        "/logout",
+        params={
+            "id_token_hint": id_token,
+            "post_logout_redirect_uri": "https://evil.example.com/",
+        },
+    )
+    assert r.status_code == 400
