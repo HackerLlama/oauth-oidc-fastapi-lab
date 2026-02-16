@@ -64,7 +64,7 @@ pytest resource_server/tests/ -v
 - **Milestone 0** — Done: three FastAPI apps, health endpoints, uvicorn entrypoints.
 - **Milestone 1** — Done: resource server JWT validation via JWKS; `/public`, `/me`, `/admin`; pytest for success and failure paths.
 - **Milestones 2–6** — Done: authorize + consent, client PKCE + callback, token endpoint (code + refresh), UserInfo, revocation, OpenAPI docs.
-- **Milestones 7–14** — Planned: client refresh, token introspection, client authentication, logout, key rotation, scope refinement, audit logging, rate limiting. See [MILESTONES.md](MILESTONES.md).
+- **Milestones 7–15** — Client refresh, token introspection, client authentication, logout, key rotation, scope refinement, audit logging, rate limiting, audit UI. See [MILESTONES.md](MILESTONES.md). Auth server exposes a read-only **audit UI** at `GET /audit/ui` (lab only; do not expose in production).
 
 Details and “before you start” notes for each milestone are in [MILESTONES.md](MILESTONES.md).
 

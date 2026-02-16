@@ -27,6 +27,8 @@ For API endpoint details, see the [OpenAPI specs](README.md) in this folder.
 
 If no clients exist at startup, a default dev client is created: `client_id=test-client`, `redirect_uri=http://127.0.0.1:8000/callback`. You still need at least one user (via `OAUTH_SEED_USER` + `OAUTH_SEED_PASSWORD`) to log in.
 
+**Audit UI (M15, lab only):** `GET {OAUTH_ISSUER}/audit/ui` — read-only HTML view of recent audit events, with optional filters (event type, outcome, client_id, limit). Unauthenticated; do not expose in production.
+
 ---
 
 ## Client Web (client_web, port 8000)

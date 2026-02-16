@@ -398,8 +398,8 @@ paths:
           description: Invalid request (e.g. token missing)
   /audit:
     get:
-      summary: List recent audit events (M13, lab use)
-      description: Returns recent audit log entries (timestamp, event_type, client_id, user_id, ip, outcome). No tokens or passwords. For lab/admin use.
+      summary: List recent audit events (M13, M15 filters; lab use)
+      description: Returns recent audit log entries (timestamp, event_type, client_id, user_id, ip, outcome). No tokens or passwords. Optional filters (M15). For lab/admin use.
       operationId: listAuditLogs
       parameters:
         - name: limit
@@ -409,6 +409,23 @@ paths:
             type: integer
             default: 100
             maximum: 500
+        - name: event_type
+          in: query
+          required: false
+          schema:
+            type: string
+            example: login_ok
+        - name: outcome
+          in: query
+          required: false
+          schema:
+            type: string
+            enum: [success, fail]
+        - name: client_id
+          in: query
+          required: false
+          schema:
+            type: string
       responses:
         '200':
           description: List of audit entries (most recent first)
@@ -437,6 +454,42 @@ paths:
                     outcome:
                       type: string
                       example: success
+  /audit/ui:
+    get:
+      summary: Audit log viewer (M15, lab only)
+      description: Returns HTML page with read-only table of recent audit events and optional filter form (limit, event_type, outcome, client_id). Unauthenticated; do not expose in production.
+      operationId: auditUi
+      parameters:
+        - name: limit
+          in: query
+          required: false
+          schema:
+            type: integer
+            default: 100
+            maximum: 500
+        - name: event_type
+          in: query
+          required: false
+          schema:
+            type: string
+        - name: outcome
+          in: query
+          required: false
+          schema:
+            type: string
+            enum: [success, fail]
+        - name: client_id
+          in: query
+          required: false
+          schema:
+            type: string
+      responses:
+        '200':
+          description: HTML page with audit table and filter form
+          content:
+            text/html:
+              schema:
+                type: string
   /.well-known/jwks.json:
     get:
       summary: JSON Web Key Set

@@ -274,3 +274,21 @@ You have a **complete, protocol-correct** OAuth2 + OIDC lab: auth server (login,
 - Apply rate limits (e.g. per IP or per client_id): e.g. max N login attempts per minute, max M token requests per minute; return 429 with Retry-After when exceeded.
 - Optionally: after K failed logins (per user or per IP), temporarily lock out or require CAPTCHA on the login form.
 - Use in-memory store or a small table for lab; document limits in config or ENV.
+
+---
+
+## Milestone 15 — Audit UI (read-only)
+
+**Before you start:**
+- **Audit data source:** M13 added audit logging and GET /audit (or equivalent) returning recent events as JSON. The UI will consume this (or the same DB/query) to display events.
+- **Read-only:** the UI is for viewing only; no editing or deletion of audit records. Audit logs are append-only for security.
+
+**Tutorial and reference links:**
+- [FastAPI – HTML responses / templates](https://fastapi.tiangolo.com/advanced/custom-response/#html-response)
+- [Jinja2 templates](https://jinja.palletsprojects.com/) (if serving server-rendered HTML)
+
+- Add an audit UI route (e.g. GET /audit/ui or /audit/view) that returns HTML.
+- Display recent audit events in a table or list: timestamp, event type, client_id, user_id (or "anonymous"), IP, outcome. Most recent first; support a limit (e.g. 50–200) and optional pagination or "load more".
+- Optionally: add simple filters (event type, outcome success/fail, date range, client_id) via query params or form; pass them through to the backend query.
+- Optionally: protect the audit UI (e.g. require a valid access token with api.admin scope, or a simple shared admin secret in a header/cookie for lab). If unauthenticated, document that the UI is for lab/dev only and should not be exposed in production.
+- Document the audit UI URL in README or ENV (e.g. how to open it, and any auth required).

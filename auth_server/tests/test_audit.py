@@ -169,3 +169,26 @@ def test_rate_limit_token_returns_429_when_exceeded(client, seeded):
         assert "Retry-After" in r.headers
     finally:
         token_mod.RATE_LIMIT_TOKEN_PER_MINUTE = original
+
+
+def test_audit_json_filter_params(client, seeded):
+    """M15: GET /audit accepts event_type, outcome, client_id and filters results."""
+    r = client.get("/audit", params={"limit": 5, "outcome": "fail"})
+    assert r.status_code == 200
+    data = r.json()
+    assert isinstance(data, list)
+    for entry in data:
+        assert entry.get("outcome") == "fail"
+
+
+def test_audit_ui_returns_html(client, seeded):
+    """M15: GET /audit/ui returns HTML with audit table and filter form."""
+    r = client.get("/audit/ui")
+    assert r.status_code == 200
+    assert "text/html" in r.headers.get("content-type", "")
+    body = r.text
+    assert "Audit log" in body
+    assert "<table" in body
+    assert "<form" in body
+    assert "event_type" in body
+    assert "outcome" in body
