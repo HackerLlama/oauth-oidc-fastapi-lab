@@ -164,6 +164,49 @@ def test_token_success_returns_access_token(client, seeded):
     assert "id_token" not in data or data.get("id_token") is None
 
 
+def test_token_granted_scope_only_in_token(client, seeded):
+    """M12: Token and refresh token carry granted scope (subset), not requested scope."""
+    db = SessionLocal()
+    try:
+        user = db.query(User).filter(User.username == "tokenuser").first()
+        verifier, challenge = _make_code_verifier_and_challenge()
+        expires = datetime.now(timezone.utc) + timedelta(seconds=60)
+        # Code has only granted scope "api.read" (user could have requested openid api.read profile)
+        auth_code = AuthorizationCode(
+            code="granted-scope-code",
+            client_id="test-client",
+            redirect_uri="http://127.0.0.1:8000/callback",
+            user_id=user.id,
+            scope="api.read",
+            code_challenge=challenge,
+            code_challenge_method="S256",
+            nonce=None,
+            expires_at=expires,
+        )
+        db.add(auth_code)
+        db.commit()
+    finally:
+        db.close()
+
+    r = client.post(
+        "/token",
+        data={
+            "grant_type": "authorization_code",
+            "code": "granted-scope-code",
+            "redirect_uri": "http://127.0.0.1:8000/callback",
+            "client_id": "test-client",
+            "code_verifier": verifier,
+        },
+    )
+    assert r.status_code == 200
+    data = r.json()
+    assert data.get("scope") == "api.read"
+    # Introspect access token: scope claim should be granted only
+    r2 = client.post("/introspect", data={"token": data["access_token"], "client_id": "test-client"})
+    assert r2.status_code == 200
+    assert r2.json().get("scope") == "api.read"
+
+
 def test_token_success_with_openid_returns_id_token(client, seeded):
     db = SessionLocal()
     try:

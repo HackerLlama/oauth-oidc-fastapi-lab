@@ -176,18 +176,15 @@ def authorize_post(
 </html>"""
         return HTMLResponse(body, status_code=401)
 
-    # Consent step (M5): show Allow/Deny before issuing code
+    # Consent step (M5, M12): show each requested scope with checkbox; Allow all / Allow selected / Deny
     def e(s: str) -> str:
         return html.escape(s or "")
 
+    requested_scopes = sorted(normalized_scope.split()) if normalized_scope else []
     scope_display = normalized_scope or "(none)"
-    body = f"""<!DOCTYPE html>
-<html>
-<head><meta charset="utf-8"><title>Consent</title></head>
-<body>
-  <h1>Consent</h1>
-  <p><strong>{e(client_id)}</strong> requests the following scopes: {e(scope_display)}</p>
-  <form method="post" action="/authorize/confirm" style="display:inline;">
+
+    # Hidden fields shared by Allow forms
+    hidden = f"""
     <input type="hidden" name="user_id" value="{user.id}"/>
     <input type="hidden" name="client_id" value="{e(client_id)}"/>
     <input type="hidden" name="redirect_uri" value="{e(redirect_uri)}"/>
@@ -197,9 +194,33 @@ def authorize_post(
     <input type="hidden" name="code_challenge_method" value="{e(code_challenge_method)}"/>
     <input type="hidden" name="nonce" value="{e(nonce)}"/>
     <input type="hidden" name="allow" value="true"/>
-    <button type="submit">Allow</button>
-  </form>
+    """
+    # Allow all: one hidden granted_scope per requested scope
+    allow_all_hidden = "".join(f'<input type="hidden" name="granted_scope" value="{e(s)}"/>' for s in requested_scopes)
+    # Allow selected: checkboxes per scope
+    checkboxes = "".join(
+        f'<label><input type="checkbox" name="granted_scope" value="{e(s)}"/> {e(s)}</label><br/>'
+        for s in requested_scopes
+    )
+
+    body = f"""<!DOCTYPE html>
+<html>
+<head><meta charset="utf-8"><title>Consent</title></head>
+<body>
+  <h1>Consent</h1>
+  <p><strong>{e(client_id)}</strong> requests the following scopes: {e(scope_display)}</p>
+  <p>Choose which scopes to grant:</p>
   <form method="post" action="/authorize/confirm" style="display:inline;">
+    {hidden}
+    {allow_all_hidden}
+    <button type="submit">Allow all</button>
+  </form>
+  <form method="post" action="/authorize/confirm" style="display:inline; margin-left: 0.5em;">
+    {hidden}
+    {checkboxes}
+    <button type="submit">Allow selected</button>
+  </form>
+  <form method="post" action="/authorize/confirm" style="display:inline; margin-left: 0.5em;">
     <input type="hidden" name="user_id" value="{user.id}"/>
     <input type="hidden" name="client_id" value="{e(client_id)}"/>
     <input type="hidden" name="redirect_uri" value="{e(redirect_uri)}"/>
@@ -216,6 +237,25 @@ def authorize_post(
     return HTMLResponse(body)
 
 
+def _normalize_granted_scope(
+    granted_scope: list[str], requested_scope_str: str
+) -> str | None:
+    """
+    Validate granted_scope is a subset of requested scopes and allowed; return normalized string or None if invalid.
+    """
+    requested = set(s.strip() for s in requested_scope_str.split() if s.strip())
+    granted = set(s.strip() for s in granted_scope if s and s.strip())
+    if not granted:
+        return ""
+    invalid = granted - requested
+    if invalid:
+        return None
+    disallowed = granted - ALLOWED_SCOPES
+    if disallowed:
+        return None
+    return " ".join(sorted(granted))
+
+
 @router.post("/authorize/confirm")
 def authorize_confirm(
     user_id: int = Form(...),
@@ -224,19 +264,31 @@ def authorize_confirm(
     scope: str = Form(""),
     state: str = Form(...),
     allow: str = Form(...),
+    granted_scope: list[str] = Form([]),
     code_challenge: str | None = Form(None),
     code_challenge_method: str | None = Form(None),
     nonce: str | None = Form(None),
     db: Session = Depends(get_db),
 ):
     """
-    Process consent. If allow: create authorization code and redirect to client. If deny: redirect with access_denied.
+    Process consent (M12: granted scope). If allow: validate granted_scope ⊆ requested, store granted on code.
     """
     client = db.query(Client).filter(Client.client_id == client_id).first()
     if not client or not client.redirect_uri_allowed(redirect_uri):
         return HTMLResponse("<h1>Invalid request</h1>", status_code=400)
 
     if allow.lower() in ("true", "1", "yes", "allow"):
+        # When no granted_scope submitted (e.g. legacy form or Allow all with no checkboxes), treat requested as granted
+        if not granted_scope and (scope or "").strip():
+            ok, normalized = _validate_scope(scope)
+            granted_normalized = normalized if ok else None
+        else:
+            granted_normalized = _normalize_granted_scope(granted_scope, scope or "")
+        if granted_normalized is None:
+            return HTMLResponse(
+                "<h1>Invalid request</h1><p>Granted scopes must be a subset of requested and allowed.</p>",
+                status_code=400,
+            )
         user = db.query(User).filter(User.id == user_id).first()
         if not user:
             return HTMLResponse("<h1>Invalid request</h1>", status_code=400)
@@ -248,7 +300,7 @@ def authorize_confirm(
                 client_id=client_id,
                 redirect_uri=redirect_uri,
                 user_id=user_id,
-                scope=scope if scope else None,
+                scope=granted_normalized or "",
                 code_challenge=code_challenge if code_challenge else None,
                 code_challenge_method=code_challenge_method if code_challenge_method else None,
                 nonce=nonce if nonce else None,

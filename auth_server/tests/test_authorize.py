@@ -162,8 +162,10 @@ def test_authorize_post_success_shows_consent(client, seeded_db):
     assert response.status_code == 200
     assert "Consent" in response.text
     assert "test-client" in response.text
-    assert "Allow" in response.text and "Deny" in response.text
+    assert "Allow all" in response.text and "Allow selected" in response.text and "Deny" in response.text
     assert "/authorize/confirm" in response.text
+    # M12: per-scope choice (api.read requested)
+    assert "api.read" in response.text
 
 
 def test_authorize_confirm_allow_redirects_with_code(client, seeded_db):
@@ -212,6 +214,52 @@ def test_authorize_confirm_allow_redirects_with_code(client, seeded_db):
         assert len(codes) >= 1
         assert not codes[-1].used
         assert codes[-1].scope == "api.read"
+    finally:
+        db.close()
+
+
+def test_authorize_confirm_granted_scope_subset(client, seeded_db):
+    """M12: Confirm with granted_scope subset stores only granted scope on the code."""
+    client.post(
+        "/authorize",
+        data={
+            "client_id": "test-client",
+            "redirect_uri": "http://127.0.0.1:8000/callback",
+            "scope": "openid api.read profile",
+            "state": "s",
+            "response_type": "code",
+            "username": "testuser",
+            "password": "testpass",
+            "code_challenge": "x",
+            "code_challenge_method": "S256",
+        },
+    )
+    db = SessionLocal()
+    user_id = db.query(User).filter(User.username == "testuser").first().id
+    db.close()
+
+    response = client.post(
+        "/authorize/confirm",
+        data={
+            "user_id": user_id,
+            "client_id": "test-client",
+            "redirect_uri": "http://127.0.0.1:8000/callback",
+            "scope": "openid api.read profile",
+            "state": "s",
+            "allow": "true",
+            "granted_scope": ["api.read"],
+            "code_challenge": "x",
+            "code_challenge_method": "S256",
+        },
+        follow_redirects=False,
+    )
+    assert response.status_code == 302
+    assert "code=" in response.headers["location"]
+    db = SessionLocal()
+    try:
+        code_row = db.query(AuthorizationCode).filter(AuthorizationCode.client_id == "test-client").order_by(AuthorizationCode.id.desc()).first()
+        assert code_row is not None
+        assert code_row.scope == "api.read"
     finally:
         db.close()
 
