@@ -29,3 +29,7 @@ REFRESH_TOKEN_EXPIRES = int(os.environ.get("OAUTH_REFRESH_TOKEN_EXPIRES", "180")
 SIGNING_KEY_PATH = os.environ.get("OAUTH_SIGNING_KEY_PATH", ".auth_signing_key.pem")
 # Optional previous key for rotation (M11): included in JWKS so existing tokens still verify; not used for new tokens.
 SIGNING_KEY_PREVIOUS_PATH = os.environ.get("OAUTH_SIGNING_KEY_PREVIOUS_PATH", "").strip() or None
+
+# Rate limiting (M14): per-IP, per minute. No credentials in code.
+RATE_LIMIT_LOGIN_PER_MINUTE = int(os.environ.get("OAUTH_RATE_LIMIT_LOGIN_PER_MINUTE", "20"))
+RATE_LIMIT_TOKEN_PER_MINUTE = int(os.environ.get("OAUTH_RATE_LIMIT_TOKEN_PER_MINUTE", "60"))

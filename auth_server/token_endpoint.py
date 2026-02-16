@@ -25,7 +25,9 @@ from auth_server.audit import (
     log_audit,
     OUTCOME_SUCCESS,
 )
+from auth_server.config import RATE_LIMIT_TOKEN_PER_MINUTE
 from auth_server.database import get_db
+from auth_server.rate_limit import check_and_consume as rate_limit_check
 from auth_server.keys import get_signing_key
 from auth_server.models import AuthorizationCode, RefreshToken, User
 
@@ -106,6 +108,14 @@ def token(
     refresh_token: exchange refresh_token for new access_token (and id_token if openid in scope); rotates refresh token.
     Confidential clients must authenticate via Authorization Basic or client_id + client_secret in form (M9).
     """
+    ip = get_client_ip(request) or "unknown"
+    allowed, retry_after = rate_limit_check(f"token:{ip}", RATE_LIMIT_TOKEN_PER_MINUTE)
+    if not allowed:
+        raise HTTPException(
+            status_code=429,
+            detail={"error": "too_many_requests", "error_description": "Rate limit exceeded"},
+            headers={"Retry-After": str(retry_after)},
+        )
     client = require_client_auth(db, request, client_id, client_secret)
     client_id = client.client_id
     if grant_type == "authorization_code":

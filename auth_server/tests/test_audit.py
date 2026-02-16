@@ -95,3 +95,77 @@ def test_audit_get_audit_returns_recent(client, seeded):
     assert "outcome" in entry
     assert entry["event_type"] == EVENT_LOGIN_FAIL
     assert "token" not in str(entry).lower() and "password" not in str(entry).lower()
+
+
+def test_rate_limit_login_returns_429_when_exceeded(client, seeded):
+    """M14: POST /authorize returns 429 with Retry-After when login rate limit exceeded."""
+    import auth_server.authorize as authorize_mod
+    original = authorize_mod.RATE_LIMIT_LOGIN_PER_MINUTE
+    authorize_mod.RATE_LIMIT_LOGIN_PER_MINUTE = 2
+    try:
+        for _ in range(2):
+            client.post(
+                "/authorize",
+                data={
+                    "client_id": "test-client",
+                    "redirect_uri": "http://127.0.0.1:8000/callback",
+                    "scope": "api.read",
+                    "state": "s",
+                    "response_type": "code",
+                    "username": "audituser",
+                    "password": "wrong",
+                    "code_challenge": "x",
+                    "code_challenge_method": "S256",
+                },
+            )
+        r = client.post(
+            "/authorize",
+            data={
+                "client_id": "test-client",
+                "redirect_uri": "http://127.0.0.1:8000/callback",
+                "scope": "api.read",
+                "state": "s",
+                "response_type": "code",
+                "username": "audituser",
+                "password": "wrong",
+                "code_challenge": "x",
+                "code_challenge_method": "S256",
+            },
+        )
+        assert r.status_code == 429
+        assert "Retry-After" in r.headers
+    finally:
+        authorize_mod.RATE_LIMIT_LOGIN_PER_MINUTE = original
+
+
+def test_rate_limit_token_returns_429_when_exceeded(client, seeded):
+    """M14: POST /token returns 429 with Retry-After when token rate limit exceeded."""
+    import auth_server.token_endpoint as token_mod
+    original = token_mod.RATE_LIMIT_TOKEN_PER_MINUTE
+    token_mod.RATE_LIMIT_TOKEN_PER_MINUTE = 2
+    try:
+        for _ in range(2):
+            client.post(
+                "/token",
+                data={
+                    "grant_type": "password",
+                    "code": "x",
+                    "redirect_uri": "http://127.0.0.1:8000/callback",
+                    "client_id": "test-client",
+                    "code_verifier": "x",
+                },
+            )
+        r = client.post(
+            "/token",
+            data={
+                "grant_type": "password",
+                "code": "x",
+                "redirect_uri": "http://127.0.0.1:8000/callback",
+                "client_id": "test-client",
+                "code_verifier": "x",
+            },
+        )
+        assert r.status_code == 429
+        assert "Retry-After" in r.headers
+    finally:
+        token_mod.RATE_LIMIT_TOKEN_PER_MINUTE = original

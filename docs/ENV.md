@@ -14,6 +14,8 @@ For API endpoint details, see the [OpenAPI specs](README.md) in this folder.
 | `AUTH_DATABASE_URL` | SQLAlchemy DB URL | `sqlite:///./auth_server.db` |
 | `OAUTH_SIGNING_KEY_PATH` | Path to RSA PEM for signing tokens | `.auth_signing_key.pem` |
 | `OAUTH_SIGNING_KEY_PREVIOUS_PATH` | Optional previous key for rotation (M11); included in JWKS for verification only | — |
+| `OAUTH_RATE_LIMIT_LOGIN_PER_MINUTE` | Max POST /authorize (login) attempts per IP per minute (M14); 429 when exceeded | `20` |
+| `OAUTH_RATE_LIMIT_TOKEN_PER_MINUTE` | Max POST /token requests per IP per minute (M14); 429 when exceeded | `60` |
 | `OAUTH_REFRESH_TOKEN_EXPIRES` | Refresh token lifetime (seconds) | `86400` (24h) |
 | **Optional seed (no default credentials)** | | |
 | `OAUTH_SEED_USER` | Create a login user with this username | — |

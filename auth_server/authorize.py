@@ -13,18 +13,19 @@ from fastapi.responses import HTMLResponse, RedirectResponse
 from sqlalchemy.orm import Session
 
 from auth_server.audit import (
+    get_client_ip,
     EVENT_CODE_ISSUED,
     EVENT_CONSENT_ALLOW,
     EVENT_CONSENT_DENY,
     EVENT_LOGIN_FAIL,
     EVENT_LOGIN_OK,
-    get_client_ip,
     log_audit,
     OUTCOME_FAIL,
     OUTCOME_SUCCESS,
 )
-from auth_server.config import ALLOWED_SCOPES, CODE_TTL_SECONDS
+from auth_server.config import ALLOWED_SCOPES, CODE_TTL_SECONDS, RATE_LIMIT_LOGIN_PER_MINUTE
 from auth_server.database import get_db
+from auth_server.rate_limit import check_and_consume as rate_limit_check
 from auth_server.models import AuthorizationCode, Client, User
 from auth_server.seed import verify_password
 
@@ -147,6 +148,14 @@ def authorize_post(
     Process login. On success: create authorization code, redirect to redirect_uri?code=...&state=...
     On failure: re-show login form with error.
     """
+    ip = get_client_ip(request) or "unknown"
+    allowed, retry_after = rate_limit_check(f"login:{ip}", RATE_LIMIT_LOGIN_PER_MINUTE)
+    if not allowed:
+        return HTMLResponse(
+            f"<h1>Too Many Requests</h1><p>Rate limit exceeded. Try again in {retry_after} seconds.</p>",
+            status_code=429,
+            headers={"Retry-After": str(retry_after)},
+        )
     if response_type != "code":
         return HTMLResponse("<h1>Invalid request</h1>", status_code=400)
 

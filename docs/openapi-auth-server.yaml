@@ -136,6 +136,8 @@ paths:
           description: Invalid request
         '401':
           description: Invalid username or password
+        '429':
+          description: Rate limit exceeded (M14); Retry-After header indicates seconds to wait
   /authorize/confirm:
     post:
       summary: Consent confirmation
@@ -236,6 +238,8 @@ paths:
                     type: integer
         '401':
           description: Invalid client (e.g. confidential client without or with wrong client_secret)
+        '429':
+          description: Rate limit exceeded (M14); Retry-After header indicates seconds to wait
         '400':
           description: Error (invalid_grant, unsupported_grant_type, invalid_request)
           content:
