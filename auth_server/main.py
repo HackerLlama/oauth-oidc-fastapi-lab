@@ -11,6 +11,7 @@ logging.basicConfig(level=logging.INFO, format="%(asctime)s %(levelname)s %(name
 
 from fastapi import FastAPI
 
+from auth_server.audit import router as audit_router
 from auth_server.authorize import router as authorize_router
 from auth_server.database import init_db, SessionLocal
 from auth_server.keys import get_signing_key
@@ -44,6 +45,7 @@ app.include_router(introspect_router, tags=["introspect"])
 app.include_router(revoke_router, tags=["revoke"])
 app.include_router(userinfo_router, tags=["userinfo"])
 app.include_router(well_known_router, tags=["well-known"])
+app.include_router(audit_router, tags=["audit"])
 
 
 @app.get("/health")

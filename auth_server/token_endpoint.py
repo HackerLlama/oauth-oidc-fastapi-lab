@@ -18,6 +18,13 @@ from auth_server.config import (
     ISSUER,
     REFRESH_TOKEN_EXPIRES,
 )
+from auth_server.audit import (
+    EVENT_TOKEN_ISSUED,
+    EVENT_TOKEN_REFRESHED,
+    get_client_ip,
+    log_audit,
+    OUTCOME_SUCCESS,
+)
 from auth_server.database import get_db
 from auth_server.keys import get_signing_key
 from auth_server.models import AuthorizationCode, RefreshToken, User
@@ -103,10 +110,20 @@ def token(
     client_id = client.client_id
     if grant_type == "authorization_code":
         return _token_authorization_code(
-            code=code, redirect_uri=redirect_uri, client_id=client_id, code_verifier=code_verifier, db=db
+            request=request,
+            code=code,
+            redirect_uri=redirect_uri,
+            client_id=client_id,
+            code_verifier=code_verifier,
+            db=db,
         )
     if grant_type == "refresh_token":
-        return _token_refresh_token(refresh_token=refresh_token, client_id=client_id, db=db)
+        return _token_refresh_token(
+            request=request,
+            refresh_token=refresh_token,
+            client_id=client_id,
+            db=db,
+        )
     raise HTTPException(
         status_code=400,
         detail={"error": "unsupported_grant_type", "error_description": "Only authorization_code and refresh_token are supported"},
@@ -114,6 +131,7 @@ def token(
 
 
 def _token_authorization_code(
+    request: Request,
     code: str | None,
     redirect_uri: str | None,
     client_id: str,
@@ -175,10 +193,23 @@ def _token_authorization_code(
     }
     if id_token:
         response["id_token"] = id_token
+    log_audit(
+        db,
+        EVENT_TOKEN_ISSUED,
+        client_id=client_id,
+        user_id=user.id,
+        ip=get_client_ip(request),
+        outcome=OUTCOME_SUCCESS,
+    )
     return response
 
 
-def _token_refresh_token(refresh_token: str | None, client_id: str, db: Session):
+def _token_refresh_token(
+    request: Request,
+    refresh_token: str | None,
+    client_id: str,
+    db: Session,
+):
     if not refresh_token:
         raise HTTPException(
             status_code=400,
@@ -233,4 +264,12 @@ def _token_refresh_token(refresh_token: str | None, client_id: str, db: Session)
     }
     if id_token:
         response["id_token"] = id_token
+    log_audit(
+        db,
+        EVENT_TOKEN_REFRESHED,
+        client_id=client_id,
+        user_id=user.id,
+        ip=get_client_ip(request),
+        outcome=OUTCOME_SUCCESS,
+    )
     return response

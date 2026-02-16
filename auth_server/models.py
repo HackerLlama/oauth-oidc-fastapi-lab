@@ -81,3 +81,16 @@ class RefreshToken(Base):
     created_at: Mapped[datetime] = mapped_column(DateTime, default=_utc_now)
 
     user: Mapped["User"] = relationship("User", backref="refresh_tokens")
+
+
+class AuditLog(Base):
+    """M13: Audit log for security-relevant events. No tokens or passwords stored."""
+    __tablename__ = "audit_log"
+
+    id: Mapped[int] = mapped_column(primary_key=True, autoincrement=True)
+    created_at: Mapped[datetime] = mapped_column(DateTime, default=_utc_now)
+    event_type: Mapped[str] = mapped_column(String(64), nullable=False, index=True)
+    client_id: Mapped[str | None] = mapped_column(String(255), nullable=True, index=True)
+    user_id: Mapped[int | None] = mapped_column(nullable=True)  # None = anonymous
+    ip: Mapped[str | None] = mapped_column(String(64), nullable=True)
+    outcome: Mapped[str] = mapped_column(String(16), nullable=False)  # success | fail

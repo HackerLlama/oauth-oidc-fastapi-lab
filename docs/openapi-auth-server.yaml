@@ -392,6 +392,47 @@ paths:
           description: Confidential client's refresh token revoke without valid client credentials
         '400':
           description: Invalid request (e.g. token missing)
+  /audit:
+    get:
+      summary: List recent audit events (M13, lab use)
+      description: Returns recent audit log entries (timestamp, event_type, client_id, user_id, ip, outcome). No tokens or passwords. For lab/admin use.
+      operationId: listAuditLogs
+      parameters:
+        - name: limit
+          in: query
+          required: false
+          schema:
+            type: integer
+            default: 100
+            maximum: 500
+      responses:
+        '200':
+          description: List of audit entries (most recent first)
+          content:
+            application/json:
+              schema:
+                type: array
+                items:
+                  type: object
+                  properties:
+                    created_at:
+                      type: string
+                      format: date-time
+                    event_type:
+                      type: string
+                      example: login_ok
+                    client_id:
+                      type: string
+                      nullable: true
+                    user_id:
+                      type: integer
+                      nullable: true
+                    ip:
+                      type: string
+                      nullable: true
+                    outcome:
+                      type: string
+                      example: success
   /.well-known/jwks.json:
     get:
       summary: JSON Web Key Set

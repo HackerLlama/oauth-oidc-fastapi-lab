@@ -12,6 +12,17 @@ from fastapi import APIRouter, Depends, Form, Request
 from fastapi.responses import HTMLResponse, RedirectResponse
 from sqlalchemy.orm import Session
 
+from auth_server.audit import (
+    EVENT_CODE_ISSUED,
+    EVENT_CONSENT_ALLOW,
+    EVENT_CONSENT_DENY,
+    EVENT_LOGIN_FAIL,
+    EVENT_LOGIN_OK,
+    get_client_ip,
+    log_audit,
+    OUTCOME_FAIL,
+    OUTCOME_SUCCESS,
+)
 from auth_server.config import ALLOWED_SCOPES, CODE_TTL_SECONDS
 from auth_server.database import get_db
 from auth_server.models import AuthorizationCode, Client, User
@@ -149,6 +160,14 @@ def authorize_post(
 
     user = db.query(User).filter(User.username == username).first()
     if not user or not verify_password(password, user.password_hash):
+        log_audit(
+            db,
+            EVENT_LOGIN_FAIL,
+            client_id=client_id,
+            user_id=None,
+            ip=get_client_ip(request),
+            outcome=OUTCOME_FAIL,
+        )
         # Re-show login form with error (escape for XSS)
         def e(s: str) -> str:
             return html.escape(s or "")
@@ -176,6 +195,14 @@ def authorize_post(
 </html>"""
         return HTMLResponse(body, status_code=401)
 
+    log_audit(
+        db,
+        EVENT_LOGIN_OK,
+        client_id=client_id,
+        user_id=user.id,
+        ip=get_client_ip(request),
+        outcome=OUTCOME_SUCCESS,
+    )
     # Consent step (M5, M12): show each requested scope with checkbox; Allow all / Allow selected / Deny
     def e(s: str) -> str:
         return html.escape(s or "")
@@ -258,6 +285,7 @@ def _normalize_granted_scope(
 
 @router.post("/authorize/confirm")
 def authorize_confirm(
+    request: Request,
     user_id: int = Form(...),
     client_id: str = Form(...),
     redirect_uri: str = Form(...),
@@ -308,7 +336,31 @@ def authorize_confirm(
             )
         )
         db.commit()
+        log_audit(
+            db,
+            EVENT_CONSENT_ALLOW,
+            client_id=client_id,
+            user_id=user_id,
+            ip=get_client_ip(request),
+            outcome=OUTCOME_SUCCESS,
+        )
+        log_audit(
+            db,
+            EVENT_CODE_ISSUED,
+            client_id=client_id,
+            user_id=user_id,
+            ip=get_client_ip(request),
+            outcome=OUTCOME_SUCCESS,
+        )
         params = {"code": code, "state": state}
         return RedirectResponse(url=f"{redirect_uri}?{urlencode(params)}", status_code=302)
     # Deny
+    log_audit(
+        db,
+        EVENT_CONSENT_DENY,
+        client_id=client_id,
+        user_id=user_id,
+        ip=get_client_ip(request),
+        outcome=OUTCOME_SUCCESS,
+    )
     return _redirect_error(redirect_uri, "access_denied", "User denied authorization", state)

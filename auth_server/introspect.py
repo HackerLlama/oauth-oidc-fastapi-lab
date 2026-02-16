@@ -9,6 +9,7 @@ import jwt
 from fastapi import APIRouter, Depends, Form, HTTPException, Request
 from sqlalchemy.orm import Session
 
+from auth_server.audit import EVENT_INTROSPECT, get_client_ip, log_audit, OUTCOME_SUCCESS
 from auth_server.client_auth import require_client_auth
 
 from auth_server.config import API_AUDIENCE, ISSUER
@@ -62,6 +63,16 @@ def introspect(
         )
 
     client = require_client_auth(db, request, client_id, client_secret)
+
+    # Audit: introspect call (no token value logged)
+    log_audit(
+        db,
+        EVENT_INTROSPECT,
+        client_id=client.client_id,
+        user_id=None,
+        ip=get_client_ip(request),
+        outcome=OUTCOME_SUCCESS,
+    )
 
     hint = (token_type_hint or "").strip().lower()
     token_value = token.strip()

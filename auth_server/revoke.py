@@ -8,6 +8,12 @@ import logging
 from fastapi import APIRouter, Depends, Form, HTTPException, Request
 from sqlalchemy.orm import Session
 
+from auth_server.audit import (
+    EVENT_TOKEN_REVOKED,
+    get_client_ip,
+    log_audit,
+    OUTCOME_SUCCESS,
+)
 from auth_server.client_auth import get_client_credentials_from_request, verify_client_credentials
 from auth_server.database import get_db
 from auth_server.models import Client, RefreshToken
@@ -50,6 +56,14 @@ def revoke(
             rt.revoked = True
             db.commit()
             logger.debug("Revoked refresh token id=%s", rt.id)
+            log_audit(
+                db,
+                EVENT_TOKEN_REVOKED,
+                client_id=rt.client_id,
+                user_id=rt.user_id,
+                ip=get_client_ip(request),
+                outcome=OUTCOME_SUCCESS,
+            )
 
     # If hint is access_token: we don't store access tokens (JWTs); nothing to revoke. Still 200.
     return {}
