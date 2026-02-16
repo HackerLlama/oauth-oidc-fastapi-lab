@@ -13,7 +13,7 @@ from sqlalchemy.orm import Session
 
 from auth_server.config import ISSUER
 from auth_server.database import get_db
-from auth_server.keys import get_signing_key
+from auth_server.keys import get_public_key_for_kid
 from auth_server.models import Client
 
 logger = logging.getLogger(__name__)
@@ -21,12 +21,17 @@ router = APIRouter()
 
 
 def _decode_id_token_hint(id_token: str) -> dict | None:
-    """Decode and verify id_token_hint JWT; return payload if valid, else None."""
+    """Decode and verify id_token_hint JWT (resolve key by kid for rotation); return payload if valid, else None."""
     if not id_token or not id_token.strip():
         return None
-    private_key, _ = get_signing_key()
-    public_key = private_key.public_key()
     try:
+        unverified = jwt.get_unverified_header(id_token.strip())
+        kid = unverified.get("kid")
+        if not kid:
+            return None
+        public_key = get_public_key_for_kid(kid)
+        if not public_key:
+            return None
         payload = jwt.decode(
             id_token.strip(),
             public_key,

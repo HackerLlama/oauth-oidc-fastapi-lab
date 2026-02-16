@@ -59,11 +59,14 @@ def _make_code_verifier_and_challenge():
 
 
 def test_jwks_returns_keys(client, seeded):
+    """JWKS returns at least the current key with kid; may include previous key for rotation (M11)."""
     r = client.get("/.well-known/jwks.json")
     assert r.status_code == 200
     data = r.json()
     assert "keys" in data
     assert len(data["keys"]) >= 1
+    kids = [k.get("kid") for k in data["keys"] if k.get("kid")]
+    assert "auth-server-key" in kids
     key = data["keys"][0]
     assert key.get("kty") == "RSA"
     assert key.get("alg") == "RS256"

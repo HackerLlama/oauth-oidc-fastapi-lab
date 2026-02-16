@@ -15,3 +15,4 @@ You can view or validate these with any OpenAPI tool (e.g. [Swagger Editor](http
 ## Other docs
 
 - [ENV.md](ENV.md) — Environment variables for all three servers
+- [KEY_ROTATION.md](KEY_ROTATION.md) — Signing key rotation (auth server, M11)

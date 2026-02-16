@@ -10,7 +10,7 @@ from sqlalchemy.orm import Session
 
 from auth_server.config import ISSUER
 from auth_server.database import get_db
-from auth_server.keys import get_signing_key
+from auth_server.keys import get_public_key_for_kid
 from auth_server.models import User
 
 logger = logging.getLogger(__name__)
@@ -19,11 +19,16 @@ security = HTTPBearer(auto_error=True)
 
 
 def _decode_access_token(credentials: HTTPAuthorizationCredentials) -> dict:
-    """Decode and validate access token issued by this server. Returns payload or raises."""
+    """Decode and validate access token (resolve key by kid from JWT header for rotation)."""
     token = credentials.credentials
-    private_key, _ = get_signing_key()
-    public_key = private_key.public_key()
     try:
+        unverified = jwt.get_unverified_header(token)
+        kid = unverified.get("kid")
+        if not kid:
+            raise HTTPException(status_code=401, detail="Invalid or expired token")
+        public_key = get_public_key_for_kid(kid)
+        if not public_key:
+            raise HTTPException(status_code=401, detail="Invalid or expired token")
         payload = jwt.decode(
             token,
             public_key,

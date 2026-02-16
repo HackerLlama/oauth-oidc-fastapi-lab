@@ -13,7 +13,7 @@ from auth_server.client_auth import require_client_auth
 
 from auth_server.config import API_AUDIENCE, ISSUER
 from auth_server.database import get_db
-from auth_server.keys import get_signing_key
+from auth_server.keys import get_public_key_for_kid
 from auth_server.models import RefreshToken
 
 logger = logging.getLogger(__name__)
@@ -21,10 +21,15 @@ router = APIRouter()
 
 
 def _introspect_access_token(token: str) -> dict | None:
-    """Verify JWT access token; return payload dict if valid and not expired, else None."""
-    private_key, _ = get_signing_key()
-    public_key = private_key.public_key()
+    """Verify JWT access token (resolve key by kid for rotation); return payload if valid, else None."""
     try:
+        unverified = jwt.get_unverified_header(token)
+        kid = unverified.get("kid")
+        if not kid:
+            return None
+        public_key = get_public_key_for_kid(kid)
+        if not public_key:
+            return None
         payload = jwt.decode(
             token,
             public_key,

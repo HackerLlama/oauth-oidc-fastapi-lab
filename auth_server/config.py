@@ -27,3 +27,5 @@ REFRESH_TOKEN_EXPIRES = int(os.environ.get("OAUTH_REFRESH_TOKEN_EXPIRES", "180")
 
 # Path to RSA private key PEM file for signing tokens. If unset or file missing, a key is generated and saved to .auth_signing_key.pem (no secret in code).
 SIGNING_KEY_PATH = os.environ.get("OAUTH_SIGNING_KEY_PATH", ".auth_signing_key.pem")
+# Optional previous key for rotation (M11): included in JWKS so existing tokens still verify; not used for new tokens.
+SIGNING_KEY_PREVIOUS_PATH = os.environ.get("OAUTH_SIGNING_KEY_PREVIOUS_PATH", "").strip() or None
